@@ -719,14 +719,28 @@ const Rapports = ({ ventes, produits }) => {
 // ============================================================
 export default function MamyStock() {
   const [page, setPage] = useState("dashboard");
-  const [produits, setProduits] = useState(INITIAL_PRODUCTS);
+  const [produits, setProduits] = useState(() => {
+  const saved = localStorage.getItem("mamystock_produits");
+  return saved ? JSON.parse(saved) : INITIAL_PRODUCTS;
+});
   const [ventes, setVentes] = useState(INITIAL_VENTES);
-  const [clients, setClients] = useState(INITIAL_CLIENTS);
+const [clients, setClients] = useState(() => {
+  const saved = localStorage.getItem("mamystock_clients");
+  return saved ? JSON.parse(saved) : INITIAL_CLIENTS;
+});
   const [notifCount, setNotifCount] = useState(0);
 
-  useEffect(() => {
-    setNotifCount(produits.filter(p => p.quantite <= p.alerte).length);
-  }, [produits]);
+ useEffect(() => {
+  localStorage.setItem("mamystock_produits", JSON.stringify(produits));
+}, [produits]);
+
+useEffect(() => {
+  localStorage.setItem("mamystock_ventes", JSON.stringify(ventes));
+}, [ventes]);
+
+useEffect(() => {
+  localStorage.setItem("mamystock_clients", JSON.stringify(clients));
+}, [clients]);
 
   const pages = [
     { id: "dashboard", label: "Accueil", icon: "dashboard" },
