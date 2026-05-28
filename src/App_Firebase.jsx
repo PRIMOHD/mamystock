@@ -831,7 +831,27 @@ const saveProduit = async (produit) => {
     } catch (e) { console.error(e); }
   };
 
-  if (loading) return <div style={{ color: "#f0f4ff", textAlign: "center", padding: 40, fontFamily: "'Sora', sans-serif", minHeight: "100vh", background: "#111520", display: "flex", alignItems: "center", justifyContent: "center" }}>{t.chargement}</div>;
+ if (loading) return (
+  <div style={{ 
+    color: "#f0f4ff", textAlign: "center", padding: 40, 
+    minHeight: "100vh", background: "#111520", 
+    display: "flex", flexDirection: "column",
+    alignItems: "center", justifyContent: "center",
+    fontFamily: "'Sora', sans-serif"
+  }}>
+    <div style={{ fontSize: 40, marginBottom: 16 }}>
+      {isOnline ? "⏳" : "📡"}
+    </div>
+    <div style={{ fontWeight: 700, fontSize: 18, marginBottom: 8 }}>
+      {isOnline ? "Chargement..." : "Hors ligne"}
+    </div>
+    <div style={{ color: "#8891aa", fontSize: 13 }}>
+      {isOnline 
+        ? "Connexion à Firebase..." 
+        : "Connectez-vous à internet pour la première utilisation"}
+    </div>
+  </div>
+);
 
   const pages = isProprietaire
     ? [
