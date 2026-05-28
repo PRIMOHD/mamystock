@@ -694,17 +694,29 @@ const AppBoutique = ({ user, onLogout, t, langue, setLangue }) => {
   useEffect(() => { setNotifCount(produits.filter(p => p.quantite <= p.alerte).length); }, [produits]);
 
   // Sauvegarder produit
-  const saveProduit = async (produit) => {
-    try {
-      if (produit.id && produit.id.length > 5) {
-        await updateDoc(doc(db, "produits", produit.id), { ...produit, boutiqueId });
-        setProduits(prev => prev.map(p => p.id === produit.id ? produit : p));
-      } else {
-        const ref = await addDoc(collection(db, "produits"), { ...produit, boutiqueId, createdAt: serverTimestamp() });
-        setProduits(prev => [...prev, { ...produit, id: ref.id }]);
-      }
-    } catch (e) { console.error(e); }
-  };
+const saveProduit = async (produit) => {
+  console.log("Sauvegarde produit:", produit);
+  try {
+    if (produit.id && produit.id.length > 5) {
+      console.log("Modification produit:", produit.id);
+      await updateDoc(doc(db, "produits", produit.id), { ...produit, boutiqueId });
+      setProduits(prev => prev.map(p => p.id === produit.id ? produit : p));
+    } else {
+      console.log("Ajout nouveau produit");
+const { id, ...produitSansId } = produit;
+const ref = await addDoc(collection(db, "produits"), { 
+  ...produitSansId, 
+  boutiqueId, 
+  createdAt: serverTimestamp() 
+});
+      console.log("Produit ajouté avec ID:", ref.id);
+      setProduits(prev => [...prev, { ...produit, id: ref.id }]);
+    }
+  } catch (e) {
+    console.error("Erreur saveProduit:", e);
+    alert("Erreur: " + e.message);
+  }
+};
 
   const deleteProduit = async (id) => {
     try {
