@@ -309,7 +309,8 @@ const Ventes = ({ produits, setProduits, ventes, setVentes, clients, setClients 
   const [search, setSearch] = useState("");
   const [modePaiement, setModePaiement] = useState("cash");
   const [montantPaye, setMontantPaye] = useState("");
-  const [clientId, setClientId] = useState("");
+ const [clientId, setClientId] = useState("");
+const [nouveauClient, setNouveauClient] = useState({ nom: "", telephone: "", quartier: "" });
   const [success, setSuccess] = useState(false);
 
   const filtered = produits.filter(p => p.quantite > 0 && p.nom.toLowerCase().includes(search.toLowerCase()));
@@ -356,9 +357,14 @@ const Ventes = ({ produits, setProduits, ventes, setVentes, clients, setClients 
       setVentes(prev => [...prev, v]);
     });
     // Mise à jour dette client
-    if (dette > 0 && clientId) {
-      setClients(prev => prev.map(c => c.id === +clientId ? { ...c, dette: c.dette + dette } : c));
-    }
+   if (dette > 0) {
+  if (clientId === "nouveau" && nouveauClient.nom) {
+    const newClient = { ...nouveauClient, id: Date.now(), dette: dette };
+    setClients(prev => [...prev, newClient]);
+  } else if (clientId) {
+    setClients(prev => prev.map(c => c.id === +clientId ? { ...c, dette: c.dette + dette } : c));
+  }
+}
     setSuccess(true);
     setTimeout(() => {
       setSuccess(false);
@@ -458,20 +464,26 @@ const Ventes = ({ produits, setProduits, ventes, setVentes, clients, setClients 
             </div>
           </div>
 
-          {modePaiement === "cash" && (
-            <Field label="Montant reçu" type="number" value={montantPaye} onChange={setMontantPaye} placeholder={total.toString()} />
-          )}
-
-          {(modePaiement === "credit" || (modePaiement === "cash" && montantPaye && +montantPaye < total)) && (
-            <div style={{ marginBottom: 16 }}>
-              <label style={{ display: "block", color: "#8891aa", fontSize: 12, fontWeight: 600, marginBottom: 8, textTransform: "uppercase" }}>Client (pour la dette)</label>
-              <select value={clientId} onChange={e => setClientId(e.target.value)} style={inputStyle}>
-                <option value="">-- Sélectionner un client --</option>
-                {clients.map(c => <option key={c.id} value={c.id}>{c.nom}</option>)}
-              </select>
-            </div>
-          )}
-
+{(modePaiement === "credit" || (modePaiement === "cash" && montantPaye && +montantPaye < total)) && (
+  <div style={{ marginBottom: 16 }}>
+    <label style={{ display: "block", color: "#8891aa", fontSize: 12, fontWeight: 600, marginBottom: 8, textTransform: "uppercase" }}>Client</label>
+    <select value={clientId} onChange={e => setClientId(e.target.value)} style={{ ...inputStyle, marginBottom: 8 }}>
+      <option value="">-- Client existant --</option>
+      {clients.map(c => <option key={c.id} value={c.id}>{c.nom}</option>)}
+      <option value="nouveau">+ Nouveau client</option>
+    </select>
+    {clientId === "nouveau" && (
+      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        <input placeholder="Nom complet *" style={inputStyle}
+          onChange={e => setNouveauClient({ ...nouveauClient, nom: e.target.value })} />
+        <input placeholder="Téléphone" style={inputStyle}
+          onChange={e => setNouveauClient({ ...nouveauClient, telephone: e.target.value })} />
+        <input placeholder="Quartier" style={inputStyle}
+          onChange={e => setNouveauClient({ ...nouveauClient, quartier: e.target.value })} />
+      </div>
+    )}
+  </div>
+)}
           {monnaie > 0 && (
             <div style={{ background: "rgba(255,217,61,0.1)", border: "1px solid rgba(255,217,61,0.3)", borderRadius: 12, padding: 12, marginBottom: 16, textAlign: "center" }}>
               <span style={{ color: "#8891aa", fontSize: 13 }}>Monnaie à rendre: </span>
@@ -500,7 +512,7 @@ const Ventes = ({ produits, setProduits, ventes, setVentes, clients, setClients 
 // PAGE DETTES
 // ============================================================
 const Dettes = ({ clients, setClients, ventes }) => {
-  const [selected, setSelected] = useState(null);
+const [selected, setSelected] = useState(null);
   const [showPaiement, setShowPaiement] = useState(false);
   const [montant, setMontant] = useState("");
   const [showAddClient, setShowAddClient] = useState(false);
