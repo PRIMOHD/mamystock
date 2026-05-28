@@ -2,7 +2,6 @@ import { useState, useEffect } from "react";
 import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
 import L from "leaflet";
 
-// Fix icône Leaflet
 delete L.Icon.Default.prototype._getIconUrl;
 L.Icon.Default.mergeOptions({
   iconRetinaUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
@@ -591,20 +590,23 @@ const AdminDashboard = ({ user, onLogout, t, langue, setLangue }) => {
                   <div style={{ color: "#f0f4ff", fontWeight: 700, fontSize: 15 }}>{b.nomBoutique}</div>
                   <div style={{ color: "#8891aa", fontSize: 12 }}>📞 {b.telephone}</div>
                   {b.adresse && <div style={{ color: "#8891aa", fontSize: 12 }}>📍 {b.adresse}</div>}
-                  {b.localisation && <div style={{ color: "#00d97e", fontSize: 11 }}><div style={{ height: 150, borderRadius: 10, overflow: "hidden", marginTop: 8 }}>
-  <MapContainer
-    center={[b.localisation.lat, b.localisation.lng]}
-    zoom={15}
-    style={{ height: "100%", width: "100%" }}
-    zoomControl={false}
-    scrollWheelZoom={false}
-  >
-    <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
-    <Marker position={[b.localisation.lat, b.localisation.lng]}>
-      <Popup>{b.nomBoutique}</Popup>
-    </Marker>
-  </MapContainer>
-</div>, {b.localisation.lng?.toFixed(4)}</div>}
+                  {b.localisation && (
+  <div style={{ height: 140, borderRadius: 10, overflow: "hidden", marginTop: 10 }}>
+    <MapContainer
+      center={[b.localisation.lat, b.localisation.lng]}
+      zoom={15}
+      style={{ height: "100%", width: "100%" }}
+      zoomControl={false}
+      scrollWheelZoom={false}
+      dragging={false}
+    >
+      <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+      <Marker position={[b.localisation.lat, b.localisation.lng]}>
+        <Popup>{b.nomBoutique}</Popup>
+      </Marker>
+    </MapContainer>
+  </div>
+)}
                 </div>
                 <div style={{ textAlign: "right" }}>
                   <div style={{ color: "#00d97e", fontWeight: 800, fontSize: 14 }}>{fmt(caBoutique)}</div>

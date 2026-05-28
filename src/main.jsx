@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import ReactDOM from "react-dom/client";
-import App from "./App.jsx";
+import App from "./App_Firebase.jsx";
 
 // ============================================================
 // BOUTON D'INSTALLATION PWA
