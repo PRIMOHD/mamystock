@@ -1,6 +1,6 @@
 {
-  "name": "MamyStock - Gestion Boutique",
-  "short_name": "MamyStock",
+  "name": "PrimoGest - Gestion Boutique",
+  "short_name": "PrimoGest",
   "description": "Le cahier de boutique intelligent",
   "start_url": "/",
   "display": "standalone",
