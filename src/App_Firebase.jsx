@@ -486,19 +486,20 @@ const AdminDashboard = ({ user, onLogout, t, langue, setLangue }) => {
   const [showBilan, setShowBilan] = useState(false);
 
   useEffect(() => {
-    const loadData = async () => {
-      try {
-        const usersSnap = await getDocs(collection(db, "users"));
-        const boutiquesData = usersSnap.docs.map(d => ({ id: d.id, ...d.data() })).filter(u => u.role === "proprietaire");
-        setBoutiques(boutiquesData);
-
-        const ventesSnap = await getDocs(collection(db, "ventes"));
-        const ventesData = ventesSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-        setVentes(ventesData);
-      } catch (e) { console.error(e); }
-      setLoading(false);
-    };
-    loadData();
+  setLoading(true);
+const unsubProduits = onSnapshot(
+  query(collection(db, "produits"), where("boutiqueId", "==", boutiqueId)),
+  (snap) => setProduits(snap.docs.map(d => ({ id: d.id, ...d.data() })))
+);
+const unsubVentes = onSnapshot(
+  query(collection(db, "ventes"), where("boutiqueId", "==", boutiqueId)),
+  (snap) => setVentes(snap.docs.map(d => ({ id: d.id, ...d.data() })))
+);
+const unsubClients = onSnapshot(
+  query(collection(db, "clients"), where("boutiqueId", "==", boutiqueId)),
+  (snap) => { setClients(snap.docs.map(d => ({ id: d.id, ...d.data() }))); setLoading(false); }
+);
+return () => { unsubProduits(); unsubVentes(); unsubClients(); };
   }, []);
 
   const totalCA = ventes.reduce((s, v) => s + (v.montant || 0), 0);
