@@ -707,9 +707,18 @@ const syncLocalToFirebase = async () => {
 
   // Charger données depuis Firestore
   useEffect(() => {
-   const loadData = async () => {
+ const loadData = async () => {
+  // Charge d'abord depuis localStorage (immédiat)
+  const localP = JSON.parse(localStorage.getItem(`pg_produits_${boutiqueId}`) || "[]");
+  const localV = JSON.parse(localStorage.getItem(`pg_ventes_${boutiqueId}`) || "[]");
+  const localC = JSON.parse(localStorage.getItem(`pg_clients_${boutiqueId}`) || "[]");
+  setProduits(localP);
+  setVentes(localV);
+  setClients(localC);
+  setLoading(false);
+
+  // Si en ligne, met à jour depuis Firebase
   if (isOnline) {
-    // En ligne → charge depuis Firebase
     try {
       const [produitsSnap, ventesSnap, clientsSnap] = await Promise.all([
         getDocs(query(collection(db, "produits"), where("boutiqueId", "==", boutiqueId))),
@@ -722,21 +731,11 @@ const syncLocalToFirebase = async () => {
       setProduits(p);
       setVentes(v);
       setClients(c);
-      // Sauvegarde locale pour mode hors ligne
       localStorage.setItem(`pg_produits_${boutiqueId}`, JSON.stringify(p));
       localStorage.setItem(`pg_ventes_${boutiqueId}`, JSON.stringify(v));
       localStorage.setItem(`pg_clients_${boutiqueId}`, JSON.stringify(c));
     } catch (e) { console.error(e); }
-  } else {
-    // Hors ligne → charge depuis localStorage
-    const p = JSON.parse(localStorage.getItem(`pg_produits_${boutiqueId}`) || "[]");
-    const v = JSON.parse(localStorage.getItem(`pg_ventes_${boutiqueId}`) || "[]");
-    const c = JSON.parse(localStorage.getItem(`pg_clients_${boutiqueId}`) || "[]");
-    setProduits(p);
-    setVentes(v);
-    setClients(c);
   }
-  setLoading(false);
 };
 loadData();
   }, [boutiqueId]);
