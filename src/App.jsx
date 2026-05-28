@@ -717,8 +717,81 @@ const Rapports = ({ ventes, produits }) => {
 // ============================================================
 // APPLICATION PRINCIPALE
 // ============================================================
+const LOGIN_PASSWORD = "mamystock123";
+
+const Login = ({ onLogin }) => {
+  const [pwd, setPwd] = useState("");
+  const [error, setError] = useState(false);
+
+  const tenter = () => {
+    if (pwd === LOGIN_PASSWORD) {
+      onLogin();
+    } else {
+      setError(true);
+      setTimeout(() => setError(false), 2000);
+    }
+  };
+
+  return (
+    <div style={{
+      minHeight: "100vh", background: "#111520",
+      display: "flex", flexDirection: "column",
+      alignItems: "center", justifyContent: "center",
+      padding: 24, fontFamily: "'Sora', sans-serif"
+    }}>
+      <div style={{
+        width: 70, height: 70, borderRadius: 20,
+        background: "linear-gradient(135deg, #00d97e, #00b360)",
+        display: "flex", alignItems: "center", justifyContent: "center",
+        fontWeight: 800, color: "#fff", fontSize: 28, marginBottom: 24
+      }}>M</div>
+      <div style={{ color: "#f0f4ff", fontWeight: 800, fontSize: 26, marginBottom: 8 }}>MamyStock</div>
+      <div style={{ color: "#8891aa", fontSize: 14, marginBottom: 40 }}>Connectez-vous pour continuer</div>
+      <div style={{ width: "100%", maxWidth: 360 }}>
+        <input
+          type="password"
+          value={pwd}
+          onChange={e => setPwd(e.target.value)}
+          onKeyDown={e => e.key === "Enter" && tenter()}
+          placeholder="Mot de passe"
+          style={{
+            width: "100%", background: "#1a1f2e",
+            border: error ? "1.5px solid #ff4757" : "1.5px solid #2d3448",
+            borderRadius: 12, color: "#f0f4ff", padding: "14px 16px",
+            fontSize: 16, outline: "none", marginBottom: 12,
+            boxSizing: "border-box", fontFamily: "'Sora', sans-serif"
+          }}
+        />
+        {error && (
+          <div style={{ color: "#ff4757", fontSize: 13, marginBottom: 12, textAlign: "center" }}>
+            ❌ Mot de passe incorrect
+          </div>
+        )}
+        <button onClick={tenter} style={{
+          width: "100%", background: "linear-gradient(135deg, #00d97e, #00b360)",
+          border: "none", borderRadius: 12, color: "#fff",
+          padding: "14px", fontSize: 16, fontWeight: 700,
+          cursor: "pointer", fontFamily: "'Sora', sans-serif"
+        }}>
+          Se connecter
+        </button>
+        <div style={{ color: "#8891aa", fontSize: 12, textAlign: "center", marginTop: 16 }}>
+          Mot de passe par défaut : mamystock123
+        </div>
+      </div>
+    </div>
+  );
+};
 export default function MamyStock() {
   const [page, setPage] = useState("dashboard");
+  const [loggedIn, setLoggedIn] = useState(() => {
+  return localStorage.getItem("mamystock_login") === "true";
+});
+
+if (!loggedIn) return <Login onLogin={() => {
+  localStorage.setItem("mamystock_login", "true");
+  setLoggedIn(true);
+}} />;
   const [produits, setProduits] = useState(() => {
   const saved = localStorage.getItem("mamystock_produits");
   return saved ? JSON.parse(saved) : INITIAL_PRODUCTS;
