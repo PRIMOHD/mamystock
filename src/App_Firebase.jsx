@@ -671,54 +671,102 @@ const AppBoutique = ({ user, onLogout, t, langue, setLangue }) => {
   const [newVendeur, setNewVendeur] = useState({ nom: "", telephone: "", password: "" });
 
   const boutiqueId = user.boutiqueId || user.id;
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
+
+useEffect(() => {
+  const handleOnline = () => {
+    setIsOnline(true);
+    syncLocalToFirebase();
+  };
+  const handleOffline = () => setIsOnline(false);
+  window.addEventListener("online", handleOnline);
+  window.addEventListener("offline", handleOffline);
+  return () => {
+    window.removeEventListener("online", handleOnline);
+    window.removeEventListener("offline", handleOffline);
+  };
+}, []);
+
+const syncLocalToFirebase = async () => {
+  try {
+    const localVentes = JSON.parse(localStorage.getItem(`pg_ventes_${boutiqueId}`) || "[]");
+    const nonSynced = localVentes.filter(v => !v.synced);
+    for (const vente of nonSynced) {
+      const { id, synced, ...venteData } = vente;
+      await addDoc(collection(db, "ventes"), { ...venteData, boutiqueId, createdAt: serverTimestamp() });
+    }
+    const syncedVentes = localVentes.map(v => ({ ...v, synced: true }));
+    localStorage.setItem(`pg_ventes_${boutiqueId}`, JSON.stringify(syncedVentes));
+    console.log("✅ Synchronisation terminée");
+  } catch (e) {
+    console.error("Erreur sync:", e);
+  }
+};
   const isProprietaire = user.role === "proprietaire";
   const boutique = { nom: user.nomBoutique || "Ma Boutique", adresse: user.adresse || "" };
 
   // Charger données depuis Firestore
   useEffect(() => {
-    const loadData = async () => {
-      try {
-        const [produitsSnap, ventesSnap, clientsSnap] = await Promise.all([
-          getDocs(query(collection(db, "produits"), where("boutiqueId", "==", boutiqueId))),
-          getDocs(query(collection(db, "ventes"), where("boutiqueId", "==", boutiqueId))),
-          getDocs(query(collection(db, "clients"), where("boutiqueId", "==", boutiqueId))),
-        ]);
-        setProduits(produitsSnap.docs.map(d => ({ id: d.id, ...d.data() })));
-        setVentes(ventesSnap.docs.map(d => ({ id: d.id, ...d.data() })));
-        setClients(clientsSnap.docs.map(d => ({ id: d.id, ...d.data() })));
-      } catch (e) { console.error(e); }
-      setLoading(false);
-    };
-    loadData();
+   const loadData = async () => {
+  if (isOnline) {
+    // En ligne → charge depuis Firebase
+    try {
+      const [produitsSnap, ventesSnap, clientsSnap] = await Promise.all([
+        getDocs(query(collection(db, "produits"), where("boutiqueId", "==", boutiqueId))),
+        getDocs(query(collection(db, "ventes"), where("boutiqueId", "==", boutiqueId))),
+        getDocs(query(collection(db, "clients"), where("boutiqueId", "==", boutiqueId))),
+      ]);
+      const p = produitsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+      const v = ventesSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+      const c = clientsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+      setProduits(p);
+      setVentes(v);
+      setClients(c);
+      // Sauvegarde locale pour mode hors ligne
+      localStorage.setItem(`pg_produits_${boutiqueId}`, JSON.stringify(p));
+      localStorage.setItem(`pg_ventes_${boutiqueId}`, JSON.stringify(v));
+      localStorage.setItem(`pg_clients_${boutiqueId}`, JSON.stringify(c));
+    } catch (e) { console.error(e); }
+  } else {
+    // Hors ligne → charge depuis localStorage
+    const p = JSON.parse(localStorage.getItem(`pg_produits_${boutiqueId}`) || "[]");
+    const v = JSON.parse(localStorage.getItem(`pg_ventes_${boutiqueId}`) || "[]");
+    const c = JSON.parse(localStorage.getItem(`pg_clients_${boutiqueId}`) || "[]");
+    setProduits(p);
+    setVentes(v);
+    setClients(c);
+  }
+  setLoading(false);
+};
+loadData();
   }, [boutiqueId]);
 
   useEffect(() => { setNotifCount(produits.filter(p => p.quantite <= p.alerte).length); }, [produits]);
 
   // Sauvegarder produit
 const saveProduit = async (produit) => {
-  console.log("Sauvegarde produit:", produit);
-  try {
-    if (produit.id && produit.id.length > 5) {
-      console.log("Modification produit:", produit.id);
-      await updateDoc(doc(db, "produits", produit.id), { ...produit, boutiqueId });
-      setProduits(prev => prev.map(p => p.id === produit.id ? produit : p));
-    } else {
-      console.log("Ajout nouveau produit");
-const { id, ...produitSansId } = produit;
-const ref = await addDoc(collection(db, "produits"), { 
-  ...produitSansId, 
-  boutiqueId, 
-  createdAt: serverTimestamp() 
-});
-      console.log("Produit ajouté avec ID:", ref.id);
-      setProduits(prev => [...prev, { ...produit, id: ref.id }]);
-    }
-  } catch (e) {
-    console.error("Erreur saveProduit:", e);
-    alert("Erreur: " + e.message);
+  const { id, ...produitSansId } = produit;
+  if (isOnline) {
+    try {
+      if (produit.id && produit.id.length > 5) {
+        await updateDoc(doc(db, "produits", produit.id), { ...produit, boutiqueId });
+        setProduits(prev => prev.map(p => p.id === produit.id ? produit : p));
+      } else {
+        const ref = await addDoc(collection(db, "produits"), { ...produitSansId, boutiqueId, createdAt: serverTimestamp() });
+        const newProduit = { ...produit, id: ref.id };
+        setProduits(prev => [...prev, newProduit]);
+        const local = JSON.parse(localStorage.getItem(`pg_produits_${boutiqueId}`) || "[]");
+        localStorage.setItem(`pg_produits_${boutiqueId}`, JSON.stringify([...local, newProduit]));
+      }
+    } catch (e) { console.error(e); alert("Erreur: " + e.message); }
+  } else {
+    // Hors ligne → sauvegarde locale
+    const newProduit = { ...produit, id: Date.now().toString() };
+    setProduits(prev => [...prev, newProduit]);
+    const local = JSON.parse(localStorage.getItem(`pg_produits_${boutiqueId}`) || "[]");
+    localStorage.setItem(`pg_produits_${boutiqueId}`, JSON.stringify([...local, newProduit]));
   }
 };
-
   const deleteProduit = async (id) => {
     try {
       await updateDoc(doc(db, "produits", id), { deleted: true });
@@ -727,34 +775,53 @@ const ref = await addDoc(collection(db, "produits"), {
   };
 
   // Enregistrer vente
-  const saveVente = async (venteData) => {
+ const saveVente = async (venteData) => {
+  const factureId = genFactureId();
+  const newVente = {
+    ...venteData,
+    boutiqueId,
+    factureId,
+    date: new Date().toISOString(),
+    vendeurId: user.id,
+    vendeurNom: user.nom || user.telephone,
+  };
+
+  // Mise à jour stock local
+  for (const item of venteData.items || []) {
+    const p = produits.find(p => p.id === item.id);
+    if (p) {
+      const newQte = p.quantite - item.qte;
+      setProduits(prev => prev.map(x => x.id === p.id ? { ...x, quantite: newQte } : x));
+      const localProduits = JSON.parse(localStorage.getItem(`pg_produits_${boutiqueId}`) || "[]");
+      localStorage.setItem(`pg_produits_${boutiqueId}`, JSON.stringify(
+        localProduits.map(x => x.id === p.id ? { ...x, quantite: newQte } : x)
+      ));
+    }
+  }
+
+  if (isOnline) {
     try {
-      const factureId = genFactureId();
-      const ref = await addDoc(collection(db, "ventes"), { ...venteData, boutiqueId, factureId, date: serverTimestamp(), vendeurId: user.id, vendeurNom: user.nom || user.telephone });
-      setVentes(prev => [...prev, { ...venteData, id: ref.id, factureId }]);
-      // Mettre à jour stock
+      const ref = await addDoc(collection(db, "ventes"), { ...newVente, createdAt: serverTimestamp() });
+      const venteAvecId = { ...newVente, id: ref.id, synced: true };
+      setVentes(prev => [...prev, venteAvecId]);
+      const local = JSON.parse(localStorage.getItem(`pg_ventes_${boutiqueId}`) || "[]");
+      localStorage.setItem(`pg_ventes_${boutiqueId}`, JSON.stringify([...local, venteAvecId]));
+      // Mise à jour stock Firebase
       for (const item of venteData.items || []) {
         const p = produits.find(p => p.id === item.id);
-        if (p) { const newQte = p.quantite - item.qte; await updateDoc(doc(db, "produits", p.id), { quantite: newQte }); setProduits(prev => prev.map(x => x.id === p.id ? { ...x, quantite: newQte } : x)); }
+        if (p) await updateDoc(doc(db, "produits", p.id), { quantite: p.quantite - item.qte });
       }
-      return { ...venteData, factureId };
+      return venteAvecId;
     } catch (e) { console.error(e); }
-  };
-
-  // Sauvegarder client
-  const saveClient = async (client) => {
-    try {
-      if (client.id && client.id.length > 5) {
-        await updateDoc(doc(db, "clients", client.id), { ...client, boutiqueId });
-        setClients(prev => prev.map(c => c.id === client.id ? client : c));
-      } else {
-        const ref = await addDoc(collection(db, "clients"), { ...client, boutiqueId, createdAt: serverTimestamp() });
-        setClients(prev => [...prev, { ...client, id: ref.id }]);
-        return ref.id;
-      }
-    } catch (e) { console.error(e); }
-  };
-
+  } else {
+    // Hors ligne → sauvegarde locale
+    const venteLocale = { ...newVente, id: Date.now().toString(), synced: false };
+    setVentes(prev => [...prev, venteLocale]);
+    const local = JSON.parse(localStorage.getItem(`pg_ventes_${boutiqueId}`) || "[]");
+    localStorage.setItem(`pg_ventes_${boutiqueId}`, JSON.stringify([...local, venteLocale]));
+    return venteLocale;
+  }
+};
   // Ajouter vendeur
   const ajouterVendeur = async () => {
     if (!newVendeur.nom || !newVendeur.telephone || !newVendeur.password) return;
@@ -797,7 +864,16 @@ const ref = await addDoc(collection(db, "produits"), {
           </div>
         </div>
         <div style={{ display: "flex", gap: 6 }}>
-          {isProprietaire && (
+               <div style={{
+  background: isOnline ? "rgba(0,217,126,0.2)" : "rgba(255,71,87,0.2)",
+  border: `1px solid ${isOnline ? "#00d97e" : "#ff4757"}`,
+  borderRadius: 8, padding: "4px 8px",
+  color: isOnline ? "#00d97e" : "#ff4757",
+  fontSize: 10, fontWeight: 700
+}}>
+  {isOnline ? "🟢 En ligne" : "🔴 Hors ligne"}
+</div>
+{isProprietaire && (
             <button onClick={() => setShowVendeurs(true)} style={{ background: "#252b3b", border: "none", borderRadius: 10, padding: 8, cursor: "pointer", display: "flex" }}>
               <Icon name="user" size={18} color="#7b8cff" />
             </button>
