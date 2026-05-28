@@ -373,6 +373,14 @@ const Login = ({ onLogin, t }) => {
   const connexion = async () => {
     if (!telephone || !password) return;
     setLoading(true); setError("");
+    // Mode hors ligne — vérifier les identifiants en cache
+if (!navigator.onLine) {
+  const cachedUsers = JSON.parse(localStorage.getItem("pg_known_users") || "[]");
+  const found = cachedUsers.find(u => u.telephone === telephone && u.password === password);
+  if (found) { onLogin(found); return; }
+  setError("Hors ligne — connectez-vous d'abord avec internet");
+  setLoading(false); return;
+}
     try {
       if (telephone === ADMIN_PHONE && password === ADMIN_PASSWORD) {
         onLogin({ telephone, role: "admin", nom: "Admin PrimoGest", id: "admin" });
@@ -1449,16 +1457,23 @@ export default function PrimoGest() {
   });
   const t = T[langue];
 
-  const handleLogin = (userData) => {
-    localStorage.setItem("primogest_user", JSON.stringify(userData));
-    setUser(userData);
-  };
+ const handleLogin = (userData) => {
+  localStorage.setItem("primogest_user", JSON.stringify(userData));
+  // Mémorise les identifiants pour connexion hors ligne
+  const cachedUsers = JSON.parse(localStorage.getItem("pg_known_users") || "[]");
+  const exists = cachedUsers.find(u => u.telephone === userData.telephone);
+  if (!exists) {
+    cachedUsers.push(userData);
+    localStorage.setItem("pg_known_users", JSON.stringify(cachedUsers));
+  }
+  setUser(userData);
+};
 
-  const handleLogout = () => {
-    localStorage.removeItem("primogest_user");
-    setUser(null);
-  };
-
+ const handleLogout = () => {
+  // Garde les données en cache mais efface la session
+  localStorage.removeItem("primogest_user");
+  setUser(null);
+};
   if (!user) return <Login onLogin={handleLogin} t={t} />;
   if (user.role === "admin") return <AdminDashboard user={user} onLogout={handleLogout} t={t} langue={langue} setLangue={setLangue} />;
   return <AppBoutique user={user} onLogout={handleLogout} t={t} langue={langue} setLangue={setLangue} />;
