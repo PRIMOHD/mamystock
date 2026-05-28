@@ -1,13 +1,4 @@
-import { useState, useEffect } from "react";
-import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
-import L from "leaflet";
-
-delete L.Icon.Default.prototype._getIconUrl;
-L.Icon.Default.mergeOptions({
-  iconRetinaUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
-  iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
-  shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
-});
+import { useState, useEffect, useCallback } from "react";
 import { db } from "./firebase";
 import {
   collection, doc, setDoc, getDoc, getDocs, addDoc,
@@ -15,7 +6,7 @@ import {
 } from "firebase/firestore";
 
 // ============================================================
-// CONFIGURATION ADMIN
+// CONFIGURATION
 // ============================================================
 const ADMIN_PHONE = "+23562282320";
 const ADMIN_PASSWORD = "primogest@admin2026";
@@ -46,8 +37,7 @@ const T = {
     aujourdhui: "Aujourd'hui", sept_jours: "7 derniers jours",
     chiffreAffaires: "Chiffre d'affaires", benefice: "Bénéfice",
     encaisse: "Encaissé", nbVentes: "Nb ventes", topProduits: "🏆 Top produits vendus",
-    seConnecter: "Se connecter", motDePasse: "Mot de passe",
-    numTel: "Numéro de téléphone",
+    seConnecter: "Se connecter", motDePasse: "Mot de passe", numTel: "Numéro de téléphone",
     motDePasseIncorrect: "❌ Numéro ou mot de passe incorrect",
     connectezVous: "Connectez-vous pour continuer",
     unites: "unités", aCredit: "À crédit", solde: "✓ Soldé",
@@ -68,9 +58,12 @@ const T = {
     boutiques: "Boutiques", transactions_globales: "Transactions globales",
     vendeurs: "Mes vendeurs", ajouter_vendeur: "Ajouter vendeur",
     bilan: "Bilan financier", bilan_trimestriel: "Bilan trimestriel",
-    localisation: "📍 Localisation enregistrée",
     nom_vendeur: "Nom du vendeur", tel_vendeur: "Téléphone vendeur",
     mdp_vendeur: "Mot de passe vendeur", creer_vendeur: "Créer le vendeur",
+    vendu_par: "Vendu par", toutes_ventes: "Toutes les ventes",
+    par_vendeur: "Par vendeur", online: "🟢 En ligne", offline: "🔴 Hors ligne",
+    sync_en_cours: "🔄 Synchronisation...", premiere_connexion: "Connectez-vous une première fois avec internet",
+    filtre_vendeur: "Filtrer par vendeur", tous_vendeurs: "Tous les vendeurs",
   },
   en: {
     appName: "PrimoGest", boutique: "Store",
@@ -94,8 +87,7 @@ const T = {
     aujourdhui: "Today", sept_jours: "Last 7 days",
     chiffreAffaires: "Revenue", benefice: "Profit",
     encaisse: "Collected", nbVentes: "Sales count", topProduits: "🏆 Top products",
-    seConnecter: "Log in", motDePasse: "Password",
-    numTel: "Phone number",
+    seConnecter: "Log in", motDePasse: "Password", numTel: "Phone number",
     motDePasseIncorrect: "❌ Wrong number or password",
     connectezVous: "Log in to continue",
     unites: "units", aCredit: "Credit", solde: "✓ Paid",
@@ -116,9 +108,12 @@ const T = {
     boutiques: "Stores", transactions_globales: "Global transactions",
     vendeurs: "My sellers", ajouter_vendeur: "Add seller",
     bilan: "Financial report", bilan_trimestriel: "Quarterly report",
-    localisation: "📍 Location saved",
     nom_vendeur: "Seller name", tel_vendeur: "Seller phone",
     mdp_vendeur: "Seller password", creer_vendeur: "Create seller",
+    vendu_par: "Sold by", toutes_ventes: "All sales",
+    par_vendeur: "By seller", online: "🟢 Online", offline: "🔴 Offline",
+    sync_en_cours: "🔄 Syncing...", premiere_connexion: "Connect once with internet first",
+    filtre_vendeur: "Filter by seller", tous_vendeurs: "All sellers",
   },
   ar: {
     appName: "PrimoGest", boutique: "المتجر",
@@ -142,8 +137,7 @@ const T = {
     aujourdhui: "اليوم", sept_jours: "آخر 7 أيام",
     chiffreAffaires: "رقم الأعمال", benefice: "الربح",
     encaisse: "المحصل", nbVentes: "عدد المبيعات", topProduits: "🏆 أكثر المنتجات مبيعاً",
-    seConnecter: "تسجيل الدخول", motDePasse: "كلمة المرور",
-    numTel: "رقم الهاتف",
+    seConnecter: "تسجيل الدخول", motDePasse: "كلمة المرور", numTel: "رقم الهاتف",
     motDePasseIncorrect: "❌ رقم أو كلمة مرور خاطئة",
     connectezVous: "سجل دخولك للمتابعة",
     unites: "وحدات", aCredit: "دين", solde: "✓ مسدد",
@@ -164,9 +158,12 @@ const T = {
     boutiques: "المتاجر", transactions_globales: "المعاملات العامة",
     vendeurs: "البائعون", ajouter_vendeur: "إضافة بائع",
     bilan: "التقرير المالي", bilan_trimestriel: "التقرير الفصلي",
-    localisation: "📍 تم حفظ الموقع",
     nom_vendeur: "اسم البائع", tel_vendeur: "هاتف البائع",
     mdp_vendeur: "كلمة مرور البائع", creer_vendeur: "إنشاء البائع",
+    vendu_par: "باعه", toutes_ventes: "كل المبيعات",
+    par_vendeur: "حسب البائع", online: "🟢 متصل", offline: "🔴 غير متصل",
+    sync_en_cours: "🔄 جاري المزامنة...", premiere_connexion: "اتصل بالإنترنت أولاً",
+    filtre_vendeur: "تصفية حسب البائع", tous_vendeurs: "كل البائعين",
   }
 };
 
@@ -174,18 +171,10 @@ const T = {
 // UTILITAIRES
 // ============================================================
 const fmt = (n) => new Intl.NumberFormat("fr-FR").format(n || 0) + " FCFA";
-const genFactureId = () => {
-  const now = new Date();
-  const year = now.getFullYear();
-  const rand = Math.floor(Math.random() * 90000) + 10000;
-  return `PG-${year}-${rand}`;
-};
-const formatDate = (date) => {
-  return new Date(date).toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric" });
-};
-const formatHeure = (date) => {
-  return new Date(date).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
-};
+const genFactureId = () => `PG-${new Date().getFullYear()}-${Math.floor(Math.random() * 90000) + 10000}`;
+const formatDate = (date) => new Date(date).toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric" });
+const formatHeure = (date) => new Date(date).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+const getDate = (v) => v?.date?.toDate ? v.date.toDate() : new Date(v?.date || Date.now());
 
 // ============================================================
 // STYLES
@@ -197,7 +186,7 @@ const inputStyle = {
 };
 
 // ============================================================
-// COMPOSANTS UI
+// ICÔNES
 // ============================================================
 const Icon = ({ name, size = 20, color = "currentColor" }) => {
   const icons = {
@@ -216,18 +205,21 @@ const Icon = ({ name, size = 20, color = "currentColor" }) => {
     edit: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />,
     phone: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.948V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 8V5z" />,
     logout: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />,
-    map: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />,
-    chart: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z" />,
-    store: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17M17 13v6a1 1 0 01-1 1H8a1 1 0 01-1-1v-6" />,
     invoice: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />,
+    store: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17M17 13v6a1 1 0 01-1 1H8a1 1 0 01-1-1v-6" />,
+    chart: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z" />,
+    filter: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />,
   };
   return (
     <svg width={size} height={size} fill="none" viewBox="0 0 24 24" stroke={color} style={{ flexShrink: 0 }}>
-      {icons[name]}
+      {icons[name] || null}
     </svg>
   );
 };
 
+// ============================================================
+// COMPOSANTS UI
+// ============================================================
 const Modal = ({ titre, onClose, children }) => (
   <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", backdropFilter: "blur(4px)", display: "flex", alignItems: "flex-end", justifyContent: "center", zIndex: 1000 }}>
     <div style={{ background: "#1a1f2e", borderRadius: "24px 24px 0 0", width: "100%", maxWidth: 480, maxHeight: "92vh", overflow: "auto", padding: "24px 20px 40px", boxShadow: "0 -8px 40px rgba(0,0,0,0.5)" }}>
@@ -266,12 +258,16 @@ const Btn = ({ children, onClick, color = "#00d97e", outlined, small, full, disa
   }}>{children}</button>
 );
 
+const Badge = ({ text, color }) => (
+  <span style={{ background: `${color}22`, border: `1px solid ${color}44`, color, borderRadius: 6, padding: "2px 8px", fontSize: 11, fontWeight: 700 }}>{text}</span>
+);
+
 // ============================================================
 // FACTURE
 // ============================================================
 const Facture = ({ vente, boutique, onClose, t }) => {
   const factureId = vente.factureId || genFactureId();
-  const date = vente.date ? new Date(vente.date) : new Date();
+  const date = getDate(vente);
 
   const printFacture = () => {
     const win = window.open("", "_blank");
@@ -281,47 +277,43 @@ const Facture = ({ vente, boutique, onClose, t }) => {
         body { font-family: Arial, sans-serif; padding: 30px; max-width: 400px; margin: 0 auto; }
         .header { text-align: center; margin-bottom: 20px; border-bottom: 2px solid #00d97e; padding-bottom: 15px; }
         .logo { font-size: 28px; font-weight: 800; color: #00d97e; }
-        .facture-id { font-size: 14px; color: #666; margin-top: 5px; }
-        .info { display: flex; justify-content: space-between; margin: 15px 0; font-size: 13px; }
         .produit { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #eee; font-size: 13px; }
         .total { display: flex; justify-content: space-between; font-weight: 800; font-size: 16px; margin-top: 15px; padding-top: 10px; border-top: 2px solid #333; }
-        .mode { text-align: center; margin-top: 15px; color: #666; font-size: 12px; }
         .footer { text-align: center; margin-top: 25px; color: #999; font-size: 11px; border-top: 1px solid #eee; padding-top: 15px; }
-        .heure { color: #666; font-size: 12px; }
+        .vendeur { background: #f5f5f5; padding: 8px; border-radius: 6px; margin: 10px 0; font-size: 12px; }
       </style></head><body>
       <div class="header">
         <div class="logo">PrimoGest</div>
         <div style="font-size:16px; font-weight:700; margin-top:5px;">${boutique?.nom || "Boutique"}</div>
         ${boutique?.adresse ? `<div style="font-size:12px; color:#666;">${boutique.adresse}</div>` : ""}
-        <div class="facture-id">Facture N° ${factureId}</div>
+        <div style="font-size:13px; color:#666; margin-top:5px;">Facture N° ${factureId}</div>
       </div>
-      <div class="info">
+      <div style="display:flex; justify-content:space-between; margin:15px 0; font-size:13px;">
         <span>📅 ${formatDate(date)}</span>
-        <span class="heure">🕐 ${formatHeure(date)}</span>
+        <span>🕐 ${formatHeure(date)}</span>
       </div>
+      ${vente.vendeurNom || vente.vendeurTel ? `
+        <div class="vendeur">
+          👤 Vendu par: <strong>${vente.vendeurNom || ""}</strong>${vente.vendeurTel ? ` | ${vente.vendeurTel}` : ""}
+        </div>
+      ` : ""}
       <div>
-        ${vente.items ? vente.items.map(item => `
+        ${(vente.items || [{ nom: vente.produit, qte: vente.quantite, prixVente: vente.montant / (vente.quantite || 1) }]).map(item => `
           <div class="produit">
             <span>${item.nom} x${item.qte}</span>
             <span>${fmt(item.prixVente * item.qte)}</span>
           </div>
-        `).join("") : `
-          <div class="produit">
-            <span>${vente.produit} x${vente.quantite}</span>
-            <span>${fmt(vente.montant)}</span>
-          </div>
-        `}
+        `).join("")}
       </div>
       <div class="total">
         <span>TOTAL</span>
         <span>${fmt(vente.montant)}</span>
       </div>
       ${vente.montant > vente.paye ? `<div style="color:#ff4757; text-align:center; margin-top:10px; font-size:13px;">Reste à payer: ${fmt(vente.montant - vente.paye)}</div>` : ""}
-      <div class="mode">Mode: ${vente.mode === "cash" ? "💵 Cash" : vente.mode === "mobile" ? "📱 Mobile Money" : "📋 À crédit"}</div>
-      <div class="footer">
-        Merci pour votre confiance !<br/>
-        PrimoGest - Le cahier de boutique intelligent
+      <div style="text-align:center; margin-top:10px; color:#666; font-size:12px;">
+        Mode: ${vente.mode === "cash" ? "💵 Cash" : vente.mode === "mobile" ? "📱 Mobile Money" : "📋 À crédit"}
       </div>
+      <div class="footer">Merci pour votre confiance !<br/>PrimoGest - Le cahier de boutique intelligent</div>
       </body></html>
     `);
     win.document.close();
@@ -331,38 +323,35 @@ const Facture = ({ vente, boutique, onClose, t }) => {
   return (
     <Modal titre={`${t.facture} — ${factureId}`} onClose={onClose}>
       <div style={{ background: "#252b3b", borderRadius: 14, padding: 20, marginBottom: 16 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 12 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
           <div style={{ color: "#00d97e", fontWeight: 800, fontSize: 16 }}>PrimoGest</div>
           <div style={{ color: "#8891aa", fontSize: 12 }}>N° {factureId}</div>
         </div>
-        <div style={{ color: "#f0f4ff", fontWeight: 700, fontSize: 15, marginBottom: 4 }}>{boutique?.nom}</div>
+        <div style={{ color: "#f0f4ff", fontWeight: 700, fontSize: 15 }}>{boutique?.nom}</div>
         <div style={{ color: "#8891aa", fontSize: 12, marginBottom: 12 }}>{boutique?.adresse}</div>
-        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 16 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 12 }}>
           <span style={{ color: "#8891aa", fontSize: 12 }}>📅 {formatDate(date)}</span>
           <span style={{ color: "#8891aa", fontSize: 12 }}>🕐 {formatHeure(date)}</span>
         </div>
+        {(vente.vendeurNom || vente.vendeurTel) && (
+          <div style={{ background: "rgba(123,140,255,0.1)", border: "1px solid rgba(123,140,255,0.3)", borderRadius: 8, padding: "8px 12px", marginBottom: 12 }}>
+            <span style={{ color: "#7b8cff", fontSize: 12 }}>👤 {t.vendu_par}: </span>
+            <span style={{ color: "#f0f4ff", fontSize: 12, fontWeight: 700 }}>{vente.vendeurNom}</span>
+            {vente.vendeurTel && <span style={{ color: "#8891aa", fontSize: 11 }}> | {vente.vendeurTel}</span>}
+          </div>
+        )}
         <div style={{ borderTop: "1px solid rgba(255,255,255,0.08)", paddingTop: 12 }}>
-          {vente.items ? vente.items.map((item, i) => (
+          {(vente.items || [{ nom: vente.produit, qte: vente.quantite, prixVente: vente.montant / (vente.quantite || 1) }]).map((item, i) => (
             <div key={i} style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
               <span style={{ color: "#f0f4ff", fontSize: 13 }}>{item.nom} x{item.qte}</span>
               <span style={{ color: "#00d97e", fontSize: 13, fontWeight: 700 }}>{fmt(item.prixVente * item.qte)}</span>
             </div>
-          )) : (
-            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
-              <span style={{ color: "#f0f4ff", fontSize: 13 }}>{vente.produit} x{vente.quantite}</span>
-              <span style={{ color: "#00d97e", fontSize: 13, fontWeight: 700 }}>{fmt(vente.montant)}</span>
-            </div>
-          )}
+          ))}
         </div>
         <div style={{ borderTop: "1px solid rgba(255,255,255,0.08)", paddingTop: 12, display: "flex", justifyContent: "space-between" }}>
           <span style={{ color: "#f0f4ff", fontWeight: 800, fontSize: 16 }}>TOTAL</span>
           <span style={{ color: "#00d97e", fontWeight: 800, fontSize: 16 }}>{fmt(vente.montant)}</span>
         </div>
-        {vente.mode === "credit" && (
-          <div style={{ color: "#ff6b6b", textAlign: "center", marginTop: 8, fontSize: 12 }}>
-            Reste: {fmt(vente.montant - vente.paye)}
-          </div>
-        )}
       </div>
       <Btn onClick={printFacture} full>🖨️ Imprimer la facture</Btn>
     </Modal>
@@ -383,59 +372,41 @@ const Login = ({ onLogin, t }) => {
 
   const connexion = async () => {
     if (!telephone || !password) return;
-    setLoading(true);
-    setError("");
+    setLoading(true); setError("");
     try {
-      // Vérifier Admin
       if (telephone === ADMIN_PHONE && password === ADMIN_PASSWORD) {
         onLogin({ telephone, role: "admin", nom: "Admin PrimoGest", id: "admin" });
         return;
       }
-      // Vérifier dans Firestore
-      const usersRef = collection(db, "users");
-      const q = query(usersRef, where("telephone", "==", telephone));
-      const snapshot = await getDocs(q);
-      if (snapshot.empty) { setError(t.motDePasseIncorrect); setLoading(false); return; }
-      const userData = { id: snapshot.docs[0].id, ...snapshot.docs[0].data() };
+      const q = query(collection(db, "users"), where("telephone", "==", telephone));
+      const snap = await getDocs(q);
+      if (snap.empty) { setError(t.motDePasseIncorrect); setLoading(false); return; }
+      const userData = { id: snap.docs[0].id, ...snap.docs[0].data() };
       if (userData.password !== password) { setError(t.motDePasseIncorrect); setLoading(false); return; }
       onLogin(userData);
-    } catch (e) {
-      setError("Erreur de connexion. Vérifiez votre connexion internet.");
-      setLoading(false);
-    }
+    } catch (e) { setError("Erreur de connexion. Vérifiez internet."); setLoading(false); }
   };
 
   const inscription = async () => {
     if (!telephone || !password || !nomBoutique) return;
-    setLoading(true);
-    setError("");
+    setLoading(true); setError("");
     try {
-      // Vérifier si le numéro existe déjà
-      const usersRef = collection(db, "users");
-      const q = query(usersRef, where("telephone", "==", telephone));
-      const snapshot = await getDocs(q);
-      if (!snapshot.empty) { setError("Ce numéro est déjà enregistré"); setLoading(false); return; }
-
-      // Obtenir la géolocalisation
+      const q = query(collection(db, "users"), where("telephone", "==", telephone));
+      const snap = await getDocs(q);
+      if (!snap.empty) { setError("Ce numéro est déjà enregistré"); setLoading(false); return; }
       let localisation = null;
       if (navigator.geolocation) {
         try {
           const pos = await new Promise((res, rej) => navigator.geolocation.getCurrentPosition(res, rej, { timeout: 5000 }));
           localisation = { lat: pos.coords.latitude, lng: pos.coords.longitude };
-        } catch (e) { localisation = null; }
+        } catch (e) {}
       }
-
-      // Créer le compte
-      const userRef = await addDoc(collection(db, "users"), {
+      const ref = await addDoc(collection(db, "users"), {
         telephone, password, nomBoutique, adresse, role: "proprietaire",
         localisation, createdAt: serverTimestamp(), actif: true,
       });
-
-      onLogin({ id: userRef.id, telephone, nomBoutique, adresse, role: "proprietaire", localisation });
-    } catch (e) {
-      setError("Erreur lors de la création du compte.");
-      setLoading(false);
-    }
+      onLogin({ id: ref.id, telephone, nomBoutique, adresse, role: "proprietaire", localisation });
+    } catch (e) { setError("Erreur création compte."); setLoading(false); }
   };
 
   return (
@@ -443,29 +414,17 @@ const Login = ({ onLogin, t }) => {
       <div style={{ width: 72, height: 72, borderRadius: 20, background: "linear-gradient(135deg, #00d97e, #00b360)", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, color: "#fff", fontSize: 30, marginBottom: 20 }}>P</div>
       <div style={{ color: "#f0f4ff", fontWeight: 800, fontSize: 26, marginBottom: 6 }}>PrimoGest</div>
       <div style={{ color: "#8891aa", fontSize: 14, marginBottom: 36 }}>{t.connectezVous}</div>
-
       <div style={{ width: "100%", maxWidth: 360 }}>
-        <input type="tel" value={telephone} onChange={e => setTelephone(e.target.value)}
-          placeholder="+235 XX XX XX XX" style={{ ...inputStyle, marginBottom: 12 }} />
-        <input type="password" value={password} onChange={e => setPassword(e.target.value)}
-          onKeyDown={e => e.key === "Enter" && (isInscription ? inscription() : connexion())}
-          placeholder={t.motDePasse} style={{ ...inputStyle, marginBottom: 12 }} />
-
-        {isInscription && (
-          <>
-            <input value={nomBoutique} onChange={e => setNomBoutique(e.target.value)}
-              placeholder={t.nomBoutique + " *"} style={{ ...inputStyle, marginBottom: 12 }} />
-            <input value={adresse} onChange={e => setAdresse(e.target.value)}
-              placeholder={t.adresse} style={{ ...inputStyle, marginBottom: 12 }} />
-          </>
-        )}
-
+        <input type="tel" value={telephone} onChange={e => setTelephone(e.target.value)} placeholder="+235 XX XX XX XX" style={{ ...inputStyle, marginBottom: 12 }} />
+        <input type="password" value={password} onChange={e => setPassword(e.target.value)} onKeyDown={e => e.key === "Enter" && (isInscription ? inscription() : connexion())} placeholder={t.motDePasse} style={{ ...inputStyle, marginBottom: 12 }} />
+        {isInscription && <>
+          <input value={nomBoutique} onChange={e => setNomBoutique(e.target.value)} placeholder={t.nomBoutique + " *"} style={{ ...inputStyle, marginBottom: 12 }} />
+          <input value={adresse} onChange={e => setAdresse(e.target.value)} placeholder={t.adresse} style={{ ...inputStyle, marginBottom: 12 }} />
+        </>}
         {error && <div style={{ color: "#ff4757", fontSize: 13, marginBottom: 12, textAlign: "center" }}>{error}</div>}
-
         <button onClick={isInscription ? inscription : connexion} disabled={loading} style={{ width: "100%", background: loading ? "#555" : "linear-gradient(135deg, #00d97e, #00b360)", border: "none", borderRadius: 12, color: "#fff", padding: 14, fontSize: 16, fontWeight: 700, cursor: loading ? "not-allowed" : "pointer", fontFamily: "'Sora', sans-serif", marginBottom: 16 }}>
           {loading ? t.chargement : isInscription ? t.creer_compte : t.seConnecter}
         </button>
-
         <button onClick={() => { setIsInscription(!isInscription); setError(""); }} style={{ width: "100%", background: "none", border: "none", color: "#00d97e", fontSize: 13, cursor: "pointer", fontFamily: "'Sora', sans-serif" }}>
           {isInscription ? t.deja_compte : t.pas_compte}
         </button>
@@ -475,57 +434,55 @@ const Login = ({ onLogin, t }) => {
 };
 
 // ============================================================
-// DASHBOARD ADMIN
+// ADMIN DASHBOARD
 // ============================================================
 const AdminDashboard = ({ user, onLogout, t, langue, setLangue }) => {
   const [boutiques, setBoutiques] = useState([]);
   const [ventes, setVentes] = useState([]);
-  const [page, setPage] = useState("overview");
   const [loading, setLoading] = useState(true);
   const [selectedBoutique, setSelectedBoutique] = useState(null);
   const [showBilan, setShowBilan] = useState(false);
 
   useEffect(() => {
-  setLoading(true);
-const unsubProduits = onSnapshot(
-  query(collection(db, "produits"), where("boutiqueId", "==", boutiqueId)),
-  (snap) => setProduits(snap.docs.map(d => ({ id: d.id, ...d.data() })))
-);
-const unsubVentes = onSnapshot(
-  query(collection(db, "ventes"), where("boutiqueId", "==", boutiqueId)),
-  (snap) => setVentes(snap.docs.map(d => ({ id: d.id, ...d.data() })))
-);
-const unsubClients = onSnapshot(
-  query(collection(db, "clients"), where("boutiqueId", "==", boutiqueId)),
-  (snap) => { setClients(snap.docs.map(d => ({ id: d.id, ...d.data() }))); setLoading(false); }
-);
-return () => { unsubProduits(); unsubVentes(); unsubClients(); };
+    const load = async () => {
+      try {
+        const [usersSnap, ventesSnap] = await Promise.all([
+          getDocs(collection(db, "users")),
+          getDocs(collection(db, "ventes")),
+        ]);
+        setBoutiques(usersSnap.docs.map(d => ({ id: d.id, ...d.data() })).filter(u => u.role === "proprietaire"));
+        setVentes(ventesSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+      } catch (e) { console.error(e); }
+      setLoading(false);
+    };
+    load();
   }, []);
 
   const totalCA = ventes.reduce((s, v) => s + (v.montant || 0), 0);
   const totalDettes = ventes.reduce((s, v) => s + ((v.montant || 0) - (v.paye || 0)), 0);
 
-  // Bilan trimestriel
-  const genererBilan = (boutique) => {
-    const now = new Date();
-    const trimestre = Math.floor(now.getMonth() / 3) + 1;
-    const debutTrimestre = new Date(now.getFullYear(), (trimestre - 1) * 3, 1);
-    const ventesBoutique = ventes.filter(v => v.boutiqueId === boutique.id && new Date(v.date?.toDate?.() || v.date) >= debutTrimestre);
-    const ca = ventesBoutique.reduce((s, v) => s + (v.montant || 0), 0);
-    const encaisse = ventesBoutique.reduce((s, v) => s + (v.paye || 0), 0);
-    const dettes = ca - encaisse;
-    return { trimestre, ca, encaisse, dettes, nb: ventesBoutique.length, boutique };
-  };
-
   const prodMap = {};
   ventes.forEach(v => { prodMap[v.produit] = (prodMap[v.produit] || 0) + (v.quantite || 0); });
   const topProduits = Object.entries(prodMap).sort((a, b) => b[1] - a[1]).slice(0, 5);
 
-  if (loading) return <div style={{ color: "#f0f4ff", textAlign: "center", padding: 40, fontFamily: "'Sora', sans-serif" }}>{t.chargement}</div>;
+  const genererBilan = (b) => {
+    const now = new Date();
+    const trim = Math.floor(now.getMonth() / 3) + 1;
+    const debut = new Date(now.getFullYear(), (trim - 1) * 3, 1);
+    const vB = ventes.filter(v => v.boutiqueId === b.id && getDate(v) >= debut);
+    return {
+      trimestre: trim,
+      ca: vB.reduce((s, v) => s + (v.montant || 0), 0),
+      encaisse: vB.reduce((s, v) => s + (v.paye || 0), 0),
+      dettes: vB.reduce((s, v) => s + ((v.montant || 0) - (v.paye || 0)), 0),
+      nb: vB.length,
+    };
+  };
+
+  if (loading) return <div style={{ color: "#f0f4ff", textAlign: "center", padding: 40, minHeight: "100vh", background: "#111520", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Sora', sans-serif" }}>{t.chargement}</div>;
 
   return (
-    <div style={{ maxWidth: 480, margin: "0 auto", minHeight: "100vh", background: "#111520", fontFamily: "'Sora', sans-serif", paddingBottom: 90 }}>
-      {/* HEADER ADMIN */}
+    <div style={{ maxWidth: 480, margin: "0 auto", minHeight: "100vh", background: "#111520", fontFamily: "'Sora', sans-serif", paddingBottom: 40 }}>
       <div style={{ background: "linear-gradient(135deg, #1a1f2e, #252b3b)", padding: "16px 20px", borderBottom: "1px solid rgba(0,217,126,0.2)", display: "flex", alignItems: "center", justifyContent: "space-between", position: "sticky", top: 0, zIndex: 100 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <div style={{ width: 36, height: 36, borderRadius: 10, background: "linear-gradient(135deg, #00d97e, #00b360)", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, color: "#fff", fontSize: 14 }}>P</div>
@@ -545,15 +502,14 @@ return () => { unsubProduits(); unsubVentes(); unsubClients(); };
       </div>
 
       <div style={{ padding: "20px 16px" }}>
-        {/* STATS GLOBALES */}
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 24 }}>
           {[
             { label: t.boutiques, value: boutiques.length, color: "#7b8cff", icon: "store" },
             { label: t.transactions_globales, value: ventes.length, color: "#ffd93d", icon: "chart" },
-            { label: "Chiffre d'affaires total", value: fmt(totalCA), color: "#00d97e", icon: "money" },
+            { label: "Chiffre d'affaires", value: fmt(totalCA), color: "#00d97e", icon: "money" },
             { label: "Dettes totales", value: fmt(totalDettes), color: "#ff6b6b", icon: "dette" },
           ].map(c => (
-            <div key={c.label} style={{ background: "#1a1f2e", borderRadius: 16, padding: "14px", border: `1px solid ${c.color}22` }}>
+            <div key={c.label} style={{ background: "#1a1f2e", borderRadius: 16, padding: 14, border: `1px solid ${c.color}22` }}>
               <Icon name={c.icon} size={18} color={c.color} />
               <div style={{ color: c.color, fontWeight: 800, fontSize: 15, marginTop: 8 }}>{c.value}</div>
               <div style={{ color: "#8891aa", fontSize: 11 }}>{c.label}</div>
@@ -561,7 +517,6 @@ return () => { unsubProduits(); unsubVentes(); unsubClients(); };
           ))}
         </div>
 
-        {/* TOP PRODUITS GLOBAL */}
         {topProduits.length > 0 && (
           <div style={{ background: "#1a1f2e", borderRadius: 16, padding: 16, marginBottom: 20 }}>
             <div style={{ color: "#f0f4ff", fontWeight: 700, fontSize: 15, marginBottom: 14 }}>{t.topProduits}</div>
@@ -579,39 +534,24 @@ return () => { unsubProduits(); unsubVentes(); unsubClients(); };
           </div>
         )}
 
-        {/* LISTE DES BOUTIQUES */}
         <div style={{ color: "#f0f4ff", fontWeight: 700, fontSize: 16, marginBottom: 12 }}>🏪 {t.boutiques} ({boutiques.length})</div>
         {boutiques.map(b => {
-          const ventesBoutique = ventes.filter(v => v.boutiqueId === b.id);
-          const caBoutique = ventesBoutique.reduce((s, v) => s + (v.montant || 0), 0);
+          const vB = ventes.filter(v => v.boutiqueId === b.id);
+          const caB = vB.reduce((s, v) => s + (v.montant || 0), 0);
+          const vendeurIds = [...new Set(vB.map(v => v.vendeurId))];
           return (
-            <div key={b.id} style={{ background: "#1a1f2e", borderRadius: 14, padding: "16px", marginBottom: 10, border: "1px solid rgba(255,255,255,0.05)" }}>
+            <div key={b.id} style={{ background: "#1a1f2e", borderRadius: 14, padding: 16, marginBottom: 12, border: "1px solid rgba(255,255,255,0.05)" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10 }}>
                 <div>
                   <div style={{ color: "#f0f4ff", fontWeight: 700, fontSize: 15 }}>{b.nomBoutique}</div>
                   <div style={{ color: "#8891aa", fontSize: 12 }}>📞 {b.telephone}</div>
                   {b.adresse && <div style={{ color: "#8891aa", fontSize: 12 }}>📍 {b.adresse}</div>}
-                  {b.localisation && (
-  <div style={{ height: 140, borderRadius: 10, overflow: "hidden", marginTop: 10 }}>
-    <MapContainer
-      center={[b.localisation.lat, b.localisation.lng]}
-      zoom={15}
-      style={{ height: "100%", width: "100%" }}
-      zoomControl={false}
-      scrollWheelZoom={false}
-      dragging={false}
-    >
-      <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
-      <Marker position={[b.localisation.lat, b.localisation.lng]}>
-        <Popup>{b.nomBoutique}</Popup>
-      </Marker>
-    </MapContainer>
-  </div>
-)}
+                  {b.localisation && <div style={{ color: "#00d97e", fontSize: 11 }}>🗺️ GPS: {b.localisation.lat?.toFixed(4)}, {b.localisation.lng?.toFixed(4)}</div>}
+                  <div style={{ color: "#8891aa", fontSize: 11, marginTop: 4 }}>👥 {vendeurIds.length} vendeur(s)</div>
                 </div>
                 <div style={{ textAlign: "right" }}>
-                  <div style={{ color: "#00d97e", fontWeight: 800, fontSize: 14 }}>{fmt(caBoutique)}</div>
-                  <div style={{ color: "#8891aa", fontSize: 11 }}>{ventesBoutique.length} ventes</div>
+                  <div style={{ color: "#00d97e", fontWeight: 800, fontSize: 14 }}>{fmt(caB)}</div>
+                  <div style={{ color: "#8891aa", fontSize: 11 }}>{vB.length} ventes</div>
                 </div>
               </div>
               <button onClick={() => { setSelectedBoutique(b); setShowBilan(true); }} style={{ background: "rgba(123,140,255,0.15)", border: "1px solid rgba(123,140,255,0.3)", borderRadius: 10, padding: "8px 14px", color: "#7b8cff", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "'Sora', sans-serif", width: "100%" }}>
@@ -620,21 +560,15 @@ return () => { unsubProduits(); unsubVentes(); unsubClients(); };
             </div>
           );
         })}
-
-        {boutiques.length === 0 && (
-          <div style={{ color: "#8891aa", textAlign: "center", padding: 40 }}>Aucune boutique enregistrée</div>
-        )}
+        {boutiques.length === 0 && <div style={{ color: "#8891aa", textAlign: "center", padding: 40 }}>Aucune boutique enregistrée</div>}
       </div>
 
-      {/* MODAL BILAN */}
       {showBilan && selectedBoutique && (() => {
         const bilan = genererBilan(selectedBoutique);
         return (
           <Modal titre={`📊 Bilan T${bilan.trimestre} — ${selectedBoutique.nomBoutique}`} onClose={() => setShowBilan(false)}>
             <div style={{ background: "#252b3b", borderRadius: 14, padding: 20, marginBottom: 16 }}>
-              <div style={{ color: "#8891aa", fontSize: 13, marginBottom: 16 }}>
-                Trimestre {bilan.trimestre} — {new Date().getFullYear()}
-              </div>
+              <div style={{ color: "#8891aa", fontSize: 13, marginBottom: 16 }}>Trimestre {bilan.trimestre} — {new Date().getFullYear()}</div>
               {[
                 { label: "Chiffre d'affaires", value: fmt(bilan.ca), color: "#f0f4ff" },
                 { label: "Montant encaissé", value: fmt(bilan.encaisse), color: "#00d97e" },
@@ -656,202 +590,226 @@ return () => { unsubProduits(); unsubVentes(); unsubClients(); };
 };
 
 // ============================================================
-// APP BOUTIQUE (Propriétaire + Vendeur)
+// APP BOUTIQUE
 // ============================================================
 const AppBoutique = ({ user, onLogout, t, langue, setLangue }) => {
-  const [page, setPage] = useState("dashboard");
+  const [page, setPage] = useState(user.role === "vendeur" ? "ventes" : "dashboard");
   const [produits, setProduits] = useState([]);
   const [ventes, setVentes] = useState([]);
   const [clients, setClients] = useState([]);
-  const [vendeurs, setVendeurs] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
+  const [syncing, setSyncing] = useState(false);
   const [notifCount, setNotifCount] = useState(0);
   const [showFacture, setShowFacture] = useState(null);
   const [showVendeurs, setShowVendeurs] = useState(false);
   const [newVendeur, setNewVendeur] = useState({ nom: "", telephone: "", password: "" });
 
   const boutiqueId = user.boutiqueId || user.id;
-  const [isOnline, setIsOnline] = useState(navigator.onLine);
-
-useEffect(() => {
-  const handleOnline = () => {
-    setIsOnline(true);
-    syncLocalToFirebase();
-  };
-  const handleOffline = () => setIsOnline(false);
-  window.addEventListener("online", handleOnline);
-  window.addEventListener("offline", handleOffline);
-  return () => {
-    window.removeEventListener("online", handleOnline);
-    window.removeEventListener("offline", handleOffline);
-  };
-}, []);
-
-const syncLocalToFirebase = async () => {
-  try {
-    const localVentes = JSON.parse(localStorage.getItem(`pg_ventes_${boutiqueId}`) || "[]");
-    const nonSynced = localVentes.filter(v => !v.synced);
-    for (const vente of nonSynced) {
-      const { id, synced, ...venteData } = vente;
-      await addDoc(collection(db, "ventes"), { ...venteData, boutiqueId, createdAt: serverTimestamp() });
-    }
-    const syncedVentes = localVentes.map(v => ({ ...v, synced: true }));
-    localStorage.setItem(`pg_ventes_${boutiqueId}`, JSON.stringify(syncedVentes));
-    console.log("✅ Synchronisation terminée");
-  } catch (e) {
-    console.error("Erreur sync:", e);
-  }
-};
   const isProprietaire = user.role === "proprietaire";
   const boutique = { nom: user.nomBoutique || "Ma Boutique", adresse: user.adresse || "" };
 
-  // Charger données depuis Firestore
-  useEffect(() => {
- const loadData = async () => {
-  // Charge d'abord depuis localStorage (immédiat)
-  const localP = JSON.parse(localStorage.getItem(`pg_produits_${boutiqueId}`) || "[]");
-  const localV = JSON.parse(localStorage.getItem(`pg_ventes_${boutiqueId}`) || "[]");
-  const localC = JSON.parse(localStorage.getItem(`pg_clients_${boutiqueId}`) || "[]");
-  setProduits(localP);
-  setVentes(localV);
-  setClients(localC);
-  setLoading(false);
+  // Clés localStorage
+  const KEY_P = `pg_produits_${boutiqueId}`;
+  const KEY_V = `pg_ventes_${boutiqueId}`;
+  const KEY_C = `pg_clients_${boutiqueId}`;
 
-  // Si en ligne, met à jour depuis Firebase
-  if (isOnline) {
+  // Détection connexion
+  useEffect(() => {
+    const onOnline = () => { setIsOnline(true); syncToFirebase(); };
+    const onOffline = () => setIsOnline(false);
+    window.addEventListener("online", onOnline);
+    window.addEventListener("offline", onOffline);
+    return () => { window.removeEventListener("online", onOnline); window.removeEventListener("offline", onOffline); };
+  }, []);
+
+  // Sync ventes hors ligne vers Firebase
+  const syncToFirebase = async () => {
+    setSyncing(true);
     try {
-      const [produitsSnap, ventesSnap, clientsSnap] = await Promise.all([
+      const localV = JSON.parse(localStorage.getItem(KEY_V) || "[]");
+      const nonSynced = localV.filter(v => !v.synced);
+      for (const v of nonSynced) {
+        const { id, synced, ...data } = v;
+        await addDoc(collection(db, "ventes"), { ...data, boutiqueId, createdAt: serverTimestamp() });
+      }
+      if (nonSynced.length > 0) {
+        const updated = localV.map(v => ({ ...v, synced: true }));
+        localStorage.setItem(KEY_V, JSON.stringify(updated));
+        await loadFromFirebase();
+      }
+    } catch (e) { console.error(e); }
+    setSyncing(false);
+  };
+
+  // Chargement depuis Firebase
+  const loadFromFirebase = async () => {
+    try {
+      const [pSnap, vSnap, cSnap] = await Promise.all([
         getDocs(query(collection(db, "produits"), where("boutiqueId", "==", boutiqueId))),
         getDocs(query(collection(db, "ventes"), where("boutiqueId", "==", boutiqueId))),
         getDocs(query(collection(db, "clients"), where("boutiqueId", "==", boutiqueId))),
       ]);
-      const p = produitsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-      const v = ventesSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-      const c = clientsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-      setProduits(p);
-      setVentes(v);
-      setClients(c);
-      localStorage.setItem(`pg_produits_${boutiqueId}`, JSON.stringify(p));
-      localStorage.setItem(`pg_ventes_${boutiqueId}`, JSON.stringify(v));
-      localStorage.setItem(`pg_clients_${boutiqueId}`, JSON.stringify(c));
+      const p = pSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+      const v = vSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+      const c = cSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+      setProduits(p); setVentes(v); setClients(c);
+      localStorage.setItem(KEY_P, JSON.stringify(p));
+      localStorage.setItem(KEY_V, JSON.stringify(v.map(x => ({ ...x, synced: true }))));
+      localStorage.setItem(KEY_C, JSON.stringify(c));
     } catch (e) { console.error(e); }
-  }
-};
-loadData();
+  };
+
+  // Chargement initial
+  useEffect(() => {
+    const load = async () => {
+      // D'abord charge depuis localStorage (instantané)
+      const localP = JSON.parse(localStorage.getItem(KEY_P) || "[]");
+      const localV = JSON.parse(localStorage.getItem(KEY_V) || "[]");
+      const localC = JSON.parse(localStorage.getItem(KEY_C) || "[]");
+      setProduits(localP); setVentes(localV); setClients(localC);
+      setLoading(false);
+      // Si en ligne, met à jour depuis Firebase
+      if (navigator.onLine) await loadFromFirebase();
+    };
+    load();
   }, [boutiqueId]);
 
   useEffect(() => { setNotifCount(produits.filter(p => p.quantite <= p.alerte).length); }, [produits]);
 
-  // Sauvegarder produit
-const saveProduit = async (produit) => {
-  const { id, ...produitSansId } = produit;
-  if (isOnline) {
-    try {
-      if (produit.id && produit.id.length > 5) {
-        await updateDoc(doc(db, "produits", produit.id), { ...produit, boutiqueId });
-        setProduits(prev => prev.map(p => p.id === produit.id ? produit : p));
-      } else {
-        const ref = await addDoc(collection(db, "produits"), { ...produitSansId, boutiqueId, createdAt: serverTimestamp() });
-        const newProduit = { ...produit, id: ref.id };
-        setProduits(prev => [...prev, newProduit]);
-        const local = JSON.parse(localStorage.getItem(`pg_produits_${boutiqueId}`) || "[]");
-        localStorage.setItem(`pg_produits_${boutiqueId}`, JSON.stringify([...local, newProduit]));
-      }
-    } catch (e) { console.error(e); alert("Erreur: " + e.message); }
-  } else {
-    // Hors ligne → sauvegarde locale
-    const newProduit = { ...produit, id: Date.now().toString() };
-    setProduits(prev => [...prev, newProduit]);
-    const local = JSON.parse(localStorage.getItem(`pg_produits_${boutiqueId}`) || "[]");
-    localStorage.setItem(`pg_produits_${boutiqueId}`, JSON.stringify([...local, newProduit]));
-  }
-};
-  const deleteProduit = async (id) => {
-    try {
-      await updateDoc(doc(db, "produits", id), { deleted: true });
-      setProduits(prev => prev.filter(p => p.id !== id));
-    } catch (e) { console.error(e); }
-  };
-
-  // Enregistrer vente
- const saveVente = async (venteData) => {
-  const factureId = genFactureId();
-  const newVente = {
-    ...venteData,
-    boutiqueId,
-    factureId,
-    date: new Date().toISOString(),
-    vendeurId: user.id,
-    vendeurNom: user.nom || user.telephone,
-  };
-
-  // Mise à jour stock local
-  for (const item of venteData.items || []) {
-    const p = produits.find(p => p.id === item.id);
-    if (p) {
-      const newQte = p.quantite - item.qte;
-      setProduits(prev => prev.map(x => x.id === p.id ? { ...x, quantite: newQte } : x));
-      const localProduits = JSON.parse(localStorage.getItem(`pg_produits_${boutiqueId}`) || "[]");
-      localStorage.setItem(`pg_produits_${boutiqueId}`, JSON.stringify(
-        localProduits.map(x => x.id === p.id ? { ...x, quantite: newQte } : x)
-      ));
+  // SAVE PRODUIT
+  const saveProduit = async (produit) => {
+    const { id, ...data } = produit;
+    if (isOnline) {
+      try {
+        if (id && id.length > 5) {
+          await updateDoc(doc(db, "produits", id), { ...produit, boutiqueId });
+          const updated = produits.map(p => p.id === id ? produit : p);
+          setProduits(updated);
+          localStorage.setItem(KEY_P, JSON.stringify(updated));
+        } else {
+          const ref = await addDoc(collection(db, "produits"), { ...data, boutiqueId, createdAt: serverTimestamp() });
+          const newP = { ...produit, id: ref.id };
+          const updated = [...produits, newP];
+          setProduits(updated);
+          localStorage.setItem(KEY_P, JSON.stringify(updated));
+        }
+      } catch (e) { console.error(e); alert("Erreur: " + e.message); }
+    } else {
+      const newP = { ...produit, id: id || Date.now().toString() };
+      const updated = id ? produits.map(p => p.id === id ? newP : p) : [...produits, newP];
+      setProduits(updated);
+      localStorage.setItem(KEY_P, JSON.stringify(updated));
     }
-  }
+  };
 
-  if (isOnline) {
-    try {
-      const ref = await addDoc(collection(db, "ventes"), { ...newVente, createdAt: serverTimestamp() });
-      const venteAvecId = { ...newVente, id: ref.id, synced: true };
-      setVentes(prev => [...prev, venteAvecId]);
-      const local = JSON.parse(localStorage.getItem(`pg_ventes_${boutiqueId}`) || "[]");
-      localStorage.setItem(`pg_ventes_${boutiqueId}`, JSON.stringify([...local, venteAvecId]));
-      // Mise à jour stock Firebase
-      for (const item of venteData.items || []) {
-        const p = produits.find(p => p.id === item.id);
-        if (p) await updateDoc(doc(db, "produits", p.id), { quantite: p.quantite - item.qte });
-      }
-      return venteAvecId;
-    } catch (e) { console.error(e); }
-  } else {
-    // Hors ligne → sauvegarde locale
-    const venteLocale = { ...newVente, id: Date.now().toString(), synced: false };
-    setVentes(prev => [...prev, venteLocale]);
-    const local = JSON.parse(localStorage.getItem(`pg_ventes_${boutiqueId}`) || "[]");
-    localStorage.setItem(`pg_ventes_${boutiqueId}`, JSON.stringify([...local, venteLocale]));
-    return venteLocale;
-  }
-};
-  // Ajouter vendeur
+  const deleteProduit = async (id) => {
+    if (!window.confirm("Supprimer ?")) return;
+    const updated = produits.filter(p => p.id !== id);
+    setProduits(updated);
+    localStorage.setItem(KEY_P, JSON.stringify(updated));
+    if (isOnline) { try { await updateDoc(doc(db, "produits", id), { deleted: true }); } catch (e) {} }
+  };
+
+  // SAVE VENTE
+  const saveVente = async (venteData) => {
+    const factureId = genFactureId();
+    const newVente = {
+      ...venteData,
+      boutiqueId,
+      factureId,
+      date: new Date().toISOString(),
+      vendeurId: user.id,
+      vendeurNom: user.nom || "",
+      vendeurTel: user.telephone || "",
+      synced: false,
+    };
+
+    // Mise à jour stock
+    const updatedProduits = produits.map(p => {
+      const item = (venteData.items || []).find(x => x.id === p.id);
+      return item ? { ...p, quantite: p.quantite - item.qte } : p;
+    });
+    setProduits(updatedProduits);
+    localStorage.setItem(KEY_P, JSON.stringify(updatedProduits));
+
+    // Sauvegarde vente localement
+    const venteAvecId = { ...newVente, id: Date.now().toString() };
+    const updatedVentes = [...ventes, venteAvecId];
+    setVentes(updatedVentes);
+    localStorage.setItem(KEY_V, JSON.stringify(updatedVentes));
+
+    // Si en ligne → sync Firebase
+    if (isOnline) {
+      try {
+        const { id: _id, synced: _s, ...data } = venteAvecId;
+        const ref = await addDoc(collection(db, "ventes"), { ...data, createdAt: serverTimestamp() });
+        const syncedVentes = updatedVentes.map(v => v.id === venteAvecId.id ? { ...v, id: ref.id, synced: true } : v);
+        setVentes(syncedVentes);
+        localStorage.setItem(KEY_V, JSON.stringify(syncedVentes));
+        // Sync stock Firebase
+        for (const item of venteData.items || []) {
+          const p = produits.find(p => p.id === item.id);
+          if (p && p.id.length > 5) {
+            try { await updateDoc(doc(db, "produits", p.id), { quantite: p.quantite - item.qte }); } catch (e) {}
+          }
+        }
+        return { ...venteAvecId, id: ref.id };
+      } catch (e) { console.error(e); }
+    }
+    return venteAvecId;
+  };
+
+  // SAVE CLIENT
+  const saveClient = async (client) => {
+    const { id, ...data } = client;
+    if (isOnline) {
+      try {
+        if (id && id.length > 5) {
+          await updateDoc(doc(db, "clients", id), { ...client, boutiqueId });
+          const updated = clients.map(c => c.id === id ? client : c);
+          setClients(updated);
+          localStorage.setItem(KEY_C, JSON.stringify(updated));
+        } else {
+          const ref = await addDoc(collection(db, "clients"), { ...data, boutiqueId, dette: client.dette || 0, createdAt: serverTimestamp() });
+          const newC = { ...client, id: ref.id };
+          const updated = [...clients, newC];
+          setClients(updated);
+          localStorage.setItem(KEY_C, JSON.stringify(updated));
+          return ref.id;
+        }
+      } catch (e) { console.error(e); }
+    } else {
+      const newC = { ...client, id: id || Date.now().toString() };
+      const updated = id ? clients.map(c => c.id === id ? newC : c) : [...clients, newC];
+      setClients(updated);
+      localStorage.setItem(KEY_C, JSON.stringify(updated));
+      return newC.id;
+    }
+  };
+
+  // AJOUTER VENDEUR
   const ajouterVendeur = async () => {
     if (!newVendeur.nom || !newVendeur.telephone || !newVendeur.password) return;
     try {
-      await addDoc(collection(db, "users"), { ...newVendeur, role: "vendeur", boutiqueId, nomBoutique: boutique.nom, actif: true, createdAt: serverTimestamp() });
+      await addDoc(collection(db, "users"), {
+        ...newVendeur, role: "vendeur", boutiqueId,
+        nomBoutique: boutique.nom, actif: true, createdAt: serverTimestamp()
+      });
       setNewVendeur({ nom: "", telephone: "", password: "" });
       setShowVendeurs(false);
-    } catch (e) { console.error(e); }
+    } catch (e) { alert("Erreur: " + e.message); }
   };
 
- if (loading) return (
-  <div style={{ 
-    color: "#f0f4ff", textAlign: "center", padding: 40, 
-    minHeight: "100vh", background: "#111520", 
-    display: "flex", flexDirection: "column",
-    alignItems: "center", justifyContent: "center",
-    fontFamily: "'Sora', sans-serif"
-  }}>
-    <div style={{ fontSize: 40, marginBottom: 16 }}>
-      {isOnline ? "⏳" : "📡"}
+  if (loading) return (
+    <div style={{ minHeight: "100vh", background: "#111520", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", fontFamily: "'Sora', sans-serif" }}>
+      <div style={{ fontSize: 40, marginBottom: 16 }}>{isOnline ? "⏳" : "📡"}</div>
+      <div style={{ color: "#f0f4ff", fontWeight: 700, fontSize: 18, marginBottom: 8 }}>{isOnline ? t.chargement : t.offline}</div>
+      <div style={{ color: "#8891aa", fontSize: 13, textAlign: "center", padding: "0 20px" }}>
+        {!isOnline && t.premiere_connexion}
+      </div>
     </div>
-    <div style={{ fontWeight: 700, fontSize: 18, marginBottom: 8 }}>
-      {isOnline ? "Chargement..." : "Hors ligne"}
-    </div>
-    <div style={{ color: "#8891aa", fontSize: 13 }}>
-      {isOnline 
-        ? "Connexion à Firebase..." 
-        : "Connectez-vous à internet pour la première utilisation"}
-    </div>
-  </div>
-);
+  );
 
   const pages = isProprietaire
     ? [
@@ -869,52 +827,46 @@ const saveProduit = async (produit) => {
   return (
     <div style={{ maxWidth: 480, margin: "0 auto", minHeight: "100vh", background: "#111520", fontFamily: "'Sora', sans-serif", direction: langue === "ar" ? "rtl" : "ltr" }}>
       {/* HEADER */}
-      <div style={{ background: "#1a1f2e", padding: "14px 20px 12px", borderBottom: "1px solid rgba(255,255,255,0.05)", display: "flex", alignItems: "center", justifyContent: "space-between", position: "sticky", top: 0, zIndex: 100 }}>
+      <div style={{ background: "#1a1f2e", padding: "12px 16px", borderBottom: "1px solid rgba(255,255,255,0.05)", display: "flex", alignItems: "center", justifyContent: "space-between", position: "sticky", top: 0, zIndex: 100 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <div style={{ width: 36, height: 36, borderRadius: 10, background: "linear-gradient(135deg, #00d97e, #00b360)", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, color: "#fff", fontSize: 14 }}>P</div>
+          <div style={{ width: 34, height: 34, borderRadius: 10, background: "linear-gradient(135deg, #00d97e, #00b360)", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, color: "#fff", fontSize: 13 }}>P</div>
           <div>
-            <div style={{ color: "#f0f4ff", fontWeight: 800, fontSize: 15 }}>{boutique.nom}</div>
-            <div style={{ color: "#8891aa", fontSize: 10 }}>{isProprietaire ? t.role_proprietaire : t.role_vendeur} — {user.telephone}</div>
-            <div style={{ display: "flex", gap: 3, marginTop: 2 }}>
+            <div style={{ color: "#f0f4ff", fontWeight: 800, fontSize: 14 }}>{boutique.nom}</div>
+            <div style={{ color: "#8891aa", fontSize: 10 }}>{isProprietaire ? t.role_proprietaire : `${t.role_vendeur}: ${user.nom || user.telephone}`}</div>
+            <div style={{ display: "flex", gap: 3, marginTop: 2, alignItems: "center" }}>
               {["fr", "en", "ar"].map(l => (
-                <button key={l} onClick={() => { setLangue(l); localStorage.setItem("primogest_langue", l); }} style={{ background: langue === l ? "#00d97e" : "#252b3b", border: "none", borderRadius: 5, padding: "2px 6px", color: langue === l ? "#fff" : "#8891aa", fontSize: 9, fontWeight: 700, cursor: "pointer" }}>{l.toUpperCase()}</button>
+                <button key={l} onClick={() => { setLangue(l); localStorage.setItem("primogest_langue", l); }} style={{ background: langue === l ? "#00d97e" : "#252b3b", border: "none", borderRadius: 5, padding: "2px 5px", color: langue === l ? "#fff" : "#8891aa", fontSize: 9, fontWeight: 700, cursor: "pointer" }}>{l.toUpperCase()}</button>
               ))}
+              <div style={{ background: isOnline ? "rgba(0,217,126,0.15)" : "rgba(255,71,87,0.15)", border: `1px solid ${isOnline ? "#00d97e" : "#ff4757"}44`, borderRadius: 5, padding: "2px 6px", color: isOnline ? "#00d97e" : "#ff4757", fontSize: 9, fontWeight: 700, marginLeft: 2 }}>
+                {syncing ? t.sync_en_cours : isOnline ? t.online : t.offline}
+              </div>
             </div>
           </div>
         </div>
         <div style={{ display: "flex", gap: 6 }}>
-               <div style={{
-  background: isOnline ? "rgba(0,217,126,0.2)" : "rgba(255,71,87,0.2)",
-  border: `1px solid ${isOnline ? "#00d97e" : "#ff4757"}`,
-  borderRadius: 8, padding: "4px 8px",
-  color: isOnline ? "#00d97e" : "#ff4757",
-  fontSize: 10, fontWeight: 700
-}}>
-  {isOnline ? "🟢 En ligne" : "🔴 Hors ligne"}
-</div>
-{isProprietaire && (
+          {isProprietaire && (
             <button onClick={() => setShowVendeurs(true)} style={{ background: "#252b3b", border: "none", borderRadius: 10, padding: 8, cursor: "pointer", display: "flex" }}>
-              <Icon name="user" size={18} color="#7b8cff" />
+              <Icon name="user" size={16} color="#7b8cff" />
             </button>
           )}
           <div style={{ position: "relative" }}>
             <div style={{ background: "#252b3b", borderRadius: 10, padding: 8, display: "flex" }}>
-              <Icon name="alert" size={18} color="#8891aa" />
+              <Icon name="alert" size={16} color="#8891aa" />
             </div>
-            {notifCount > 0 && <div style={{ position: "absolute", top: -4, right: -4, width: 18, height: 18, background: "#ff4757", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontSize: 10, fontWeight: 800, border: "2px solid #1a1f2e" }}>{notifCount}</div>}
+            {notifCount > 0 && <div style={{ position: "absolute", top: -4, right: -4, width: 16, height: 16, background: "#ff4757", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontSize: 9, fontWeight: 800, border: "2px solid #1a1f2e" }}>{notifCount}</div>}
           </div>
           <button onClick={onLogout} style={{ background: "#252b3b", border: "none", borderRadius: 10, padding: 8, cursor: "pointer", display: "flex" }}>
-            <Icon name="logout" size={18} color="#ff6b6b" />
+            <Icon name="logout" size={16} color="#ff6b6b" />
           </button>
         </div>
       </div>
 
       {/* CONTENU */}
-      <div style={{ padding: "20px 16px", paddingBottom: 100 }}>
+      <div style={{ padding: "16px 16px", paddingBottom: 100 }}>
         {page === "dashboard" && <DashboardBoutique ventes={ventes} produits={produits} clients={clients} t={t} langue={langue} isProprietaire={isProprietaire} />}
         {page === "stock" && isProprietaire && <StockPage produits={produits} saveProduit={saveProduit} deleteProduit={deleteProduit} t={t} />}
-        {page === "ventes" && <VentesPage produits={produits} ventes={ventes} clients={clients} saveVente={saveVente} saveClient={saveClient} t={t} isProprietaire={isProprietaire} boutique={boutique} setShowFacture={setShowFacture} />}
-        {page === "dettes" && isProprietaire && <DettesPage clients={clients} setClients={setClients} saveClient={saveClient} ventes={ventes} t={t} />}
+        {page === "ventes" && <VentesPage produits={produits} ventes={ventes} clients={clients} saveVente={saveVente} saveClient={saveClient} t={t} isProprietaire={isProprietaire} boutique={boutique} setShowFacture={setShowFacture} user={user} />}
+        {page === "dettes" && isProprietaire && <DettesPage clients={clients} saveClient={saveClient} ventes={ventes} t={t} />}
         {page === "rapports" && isProprietaire && <RapportsPage ventes={ventes} produits={produits} t={t} setShowFacture={setShowFacture} />}
       </div>
 
@@ -923,13 +875,13 @@ const saveProduit = async (produit) => {
         {pages.map(p => (
           <button key={p.id} onClick={() => setPage(p.id)} style={{ flex: 1, background: "none", border: "none", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 4, padding: "6px 0" }}>
             {p.id === "ventes" ? (
-              <div style={{ width: 50, height: 50, borderRadius: "50%", background: page === p.id ? "linear-gradient(135deg, #00d97e, #00b360)" : "#252b3b", display: "flex", alignItems: "center", justifyContent: "center", marginTop: -20, boxShadow: page === p.id ? "0 4px 20px rgba(0,217,126,0.5)" : "0 4px 12px rgba(0,0,0,0.3)", border: "3px solid #1a1f2e" }}>
-                <Icon name={p.icon} size={22} color="#fff" />
+              <div style={{ width: 48, height: 48, borderRadius: "50%", background: page === p.id ? "linear-gradient(135deg, #00d97e, #00b360)" : "#252b3b", display: "flex", alignItems: "center", justifyContent: "center", marginTop: -18, boxShadow: page === p.id ? "0 4px 20px rgba(0,217,126,0.5)" : "0 4px 12px rgba(0,0,0,0.3)", border: "3px solid #1a1f2e" }}>
+                <Icon name={p.icon} size={20} color="#fff" />
               </div>
             ) : (
-              <Icon name={p.icon} size={22} color={page === p.id ? "#00d97e" : "#555e7a"} />
+              <Icon name={p.icon} size={20} color={page === p.id ? "#00d97e" : "#555e7a"} />
             )}
-            <span style={{ fontSize: 10, fontWeight: 700, color: page === p.id ? "#00d97e" : "#555e7a" }}>{p.label}</span>
+            <span style={{ fontSize: 9, fontWeight: 700, color: page === p.id ? "#00d97e" : "#555e7a" }}>{p.label}</span>
           </button>
         ))}
       </div>
@@ -954,61 +906,65 @@ const saveProduit = async (produit) => {
 // DASHBOARD BOUTIQUE
 // ============================================================
 const DashboardBoutique = ({ ventes, produits, clients, t, langue, isProprietaire }) => {
-  const ventesAujourdhui = ventes.filter(v => {
-    const d = v.date?.toDate ? v.date.toDate() : new Date(v.date);
-    return d.toDateString() === new Date().toDateString();
-  });
-  const totalVentes = ventesAujourdhui.reduce((s, v) => s + (v.paye || 0), 0);
+  const aujourd = ventes.filter(v => getDate(v).toDateString() === new Date().toDateString());
+  const totalVentes = aujourd.reduce((s, v) => s + (v.paye || 0), 0);
   const totalDettes = clients.reduce((s, c) => s + (c.dette || 0), 0);
   const ruptures = produits.filter(p => p.quantite === 0).length;
   const alertes = produits.filter(p => p.quantite > 0 && p.quantite <= p.alerte).length;
-  const benefice = ventesAujourdhui.reduce((s, v) => {
+  const benefice = aujourd.reduce((s, v) => {
     const p = produits.find(p => p.nom === v.produit);
     return p ? s + (p.prixVente - p.prixAchat) * (v.quantite || 0) : s;
   }, 0);
 
-  const cards = [
-    { label: t.ventesAujourdhui, value: fmt(totalVentes), icon: "vente", color: "#00d97e" },
-    { label: t.beneficeEstime, value: fmt(benefice), icon: "money", color: "#ffd93d" },
-    { label: t.dettesClients, value: fmt(totalDettes), icon: "dette", color: "#ff6b6b" },
-    { label: t.rupturesStock, value: `${ruptures} (${alertes})`, icon: "alert", color: "#ff9f43" },
-  ];
-
   return (
     <div>
-      <div style={{ marginBottom: 20 }}>
-        <p style={{ color: "#8891aa", margin: 0, fontSize: 13 }}>{new Date().toLocaleDateString(langue === "ar" ? "ar-TN" : langue === "en" ? "en-US" : "fr-FR", { weekday: "long", day: "numeric", month: "long" })}</p>
-        <h2 style={{ margin: "4px 0 0", color: "#f0f4ff", fontSize: 22, fontWeight: 800 }}>{t.bonjour}</h2>
+      <div style={{ marginBottom: 16 }}>
+        <p style={{ color: "#8891aa", margin: 0, fontSize: 12, textTransform: "capitalize" }}>
+          {new Date().toLocaleDateString(langue === "ar" ? "ar-TN" : langue === "en" ? "en-US" : "fr-FR", { weekday: "long", day: "numeric", month: "long" })}
+        </p>
+        <h2 style={{ margin: "4px 0 0", color: "#f0f4ff", fontSize: 20, fontWeight: 800 }}>{t.bonjour}</h2>
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 20 }}>
-        {cards.map(c => (
-          <div key={c.label} style={{ background: "#1a1f2e", borderRadius: 16, padding: "14px", border: `1px solid ${c.color}22` }}>
-            <Icon name={c.icon} size={18} color={c.color} />
-            <div style={{ color: c.color, fontWeight: 800, fontSize: 15, marginTop: 8 }}>{c.value}</div>
-            <div style={{ color: "#8891aa", fontSize: 11 }}>{c.label}</div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 16 }}>
+        {[
+          { label: t.ventesAujourdhui, value: fmt(totalVentes), icon: "vente", color: "#00d97e" },
+          { label: t.beneficeEstime, value: fmt(benefice), icon: "money", color: "#ffd93d" },
+          { label: t.dettesClients, value: fmt(totalDettes), icon: "dette", color: "#ff6b6b" },
+          { label: t.rupturesStock, value: `${ruptures} (${alertes})`, icon: "alert", color: "#ff9f43" },
+        ].map(c => (
+          <div key={c.label} style={{ background: "#1a1f2e", borderRadius: 14, padding: 12, border: `1px solid ${c.color}22` }}>
+            <Icon name={c.icon} size={16} color={c.color} />
+            <div style={{ color: c.color, fontWeight: 800, fontSize: 14, marginTop: 6 }}>{c.value}</div>
+            <div style={{ color: "#8891aa", fontSize: 10 }}>{c.label}</div>
           </div>
         ))}
       </div>
       {(ruptures > 0 || alertes > 0) && (
-        <div style={{ background: "rgba(255,159,67,0.1)", border: "1px solid rgba(255,159,67,0.3)", borderRadius: 14, padding: 16, marginBottom: 16 }}>
-          <div style={{ color: "#ff9f43", fontWeight: 700, fontSize: 14, marginBottom: 8 }}>{t.alertesStock}</div>
+        <div style={{ background: "rgba(255,159,67,0.1)", border: "1px solid rgba(255,159,67,0.3)", borderRadius: 12, padding: 14, marginBottom: 14 }}>
+          <div style={{ color: "#ff9f43", fontWeight: 700, fontSize: 13, marginBottom: 8 }}>{t.alertesStock}</div>
           {produits.filter(p => p.quantite <= p.alerte).map(p => (
-            <div key={p.id} style={{ color: "#c8cfd8", fontSize: 13, padding: "4px 0" }}>
+            <div key={p.id} style={{ color: "#c8cfd8", fontSize: 12, padding: "3px 0" }}>
               {p.quantite === 0 ? "🔴" : "🟡"} {p.nom} — {p.quantite === 0 ? t.ruptureTotale : `${p.quantite} ${t.restants}`}
             </div>
           ))}
         </div>
       )}
-      <div style={{ background: "#1a1f2e", borderRadius: 16, padding: 16 }}>
-        <div style={{ color: "#f0f4ff", fontWeight: 700, fontSize: 15, marginBottom: 12 }}>{t.dernieresVentes}</div>
-        {ventes.length === 0 ? <div style={{ color: "#8891aa", fontSize: 13, textAlign: "center", padding: 20 }}>{t.aucuneVente}</div>
+      <div style={{ background: "#1a1f2e", borderRadius: 14, padding: 14 }}>
+        <div style={{ color: "#f0f4ff", fontWeight: 700, fontSize: 14, marginBottom: 10 }}>{t.dernieresVentes}</div>
+        {ventes.length === 0 ? <div style={{ color: "#8891aa", fontSize: 12, textAlign: "center", padding: 16 }}>{t.aucuneVente}</div>
           : ventes.slice(-5).reverse().map(v => (
-            <div key={v.id} style={{ display: "flex", justifyContent: "space-between", padding: "10px 0", borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
-              <div>
-                <div style={{ color: "#f0f4ff", fontSize: 13, fontWeight: 600 }}>{v.produit}</div>
-                <div style={{ color: "#8891aa", fontSize: 11 }}>#{v.factureId}</div>
+            <div key={v.id} style={{ padding: "8px 0", borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                <div>
+                  <div style={{ color: "#f0f4ff", fontSize: 13, fontWeight: 600 }}>{v.produit}</div>
+                  {(v.vendeurNom || v.vendeurTel) && (
+                    <div style={{ color: "#7b8cff", fontSize: 10 }}>
+                      👤 {v.vendeurNom || ""}{v.vendeurTel ? ` | ${v.vendeurTel}` : ""}
+                    </div>
+                  )}
+                  <div style={{ color: "#8891aa", fontSize: 10 }}>#{v.factureId}</div>
+                </div>
+                <div style={{ color: v.mode === "credit" ? "#ff6b6b" : "#00d97e", fontWeight: 700, fontSize: 13 }}>{fmt(v.paye || 0)}</div>
               </div>
-              <div style={{ color: v.mode === "credit" ? "#ff6b6b" : "#00d97e", fontWeight: 700, fontSize: 13 }}>{fmt(v.paye || 0)}</div>
             </div>
           ))}
       </div>
@@ -1025,11 +981,11 @@ const StockPage = ({ produits, saveProduit, deleteProduit, t }) => {
   const [search, setSearch] = useState("");
   const [form, setForm] = useState({ nom: "", categorie: "Alimentation", prixAchat: "", prixVente: "", quantite: "", alerte: "5" });
 
-  const filtered = produits.filter(p => p.nom?.toLowerCase().includes(search.toLowerCase()));
+  const filtered = produits.filter(p => !p.deleted && p.nom?.toLowerCase().includes(search.toLowerCase()));
   const statusColor = (p) => p.quantite === 0 ? "#ff4757" : p.quantite <= p.alerte ? "#ff9f43" : "#00d97e";
 
   const openAdd = () => { setEditProduit(null); setForm({ nom: "", categorie: "Alimentation", prixAchat: "", prixVente: "", quantite: "", alerte: "5" }); setShowModal(true); };
-  const openEdit = (p) => { setEditProduit(p); setForm(p); setShowModal(true); };
+  const openEdit = (p) => { setEditProduit(p); setForm({ ...p, prixAchat: p.prixAchat || "", prixVente: p.prixVente || "", quantite: p.quantite || "", alerte: p.alerte || "5" }); setShowModal(true); };
   const save = () => {
     if (!form.nom) return;
     saveProduit({ ...form, prixAchat: +form.prixAchat, prixVente: +form.prixVente, quantite: +form.quantite, alerte: +form.alerte, id: editProduit?.id });
@@ -1038,34 +994,34 @@ const StockPage = ({ produits, saveProduit, deleteProduit, t }) => {
 
   return (
     <div>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-        <h2 style={{ margin: 0, color: "#f0f4ff", fontSize: 20, fontWeight: 800 }}>{t.monStock}</h2>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+        <h2 style={{ margin: 0, color: "#f0f4ff", fontSize: 18, fontWeight: 800 }}>{t.monStock}</h2>
         <Btn onClick={openAdd} small>+ {t.ajouter}</Btn>
       </div>
-      <input value={search} onChange={e => setSearch(e.target.value)} placeholder={t.chercher} style={{ ...inputStyle, marginBottom: 16, width: "100%", boxSizing: "border-box" }} />
-      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+      <input value={search} onChange={e => setSearch(e.target.value)} placeholder={t.chercher} style={{ ...inputStyle, marginBottom: 14, width: "100%", boxSizing: "border-box" }} />
+      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
         {filtered.map(p => (
-          <div key={p.id} style={{ background: "#1a1f2e", borderRadius: 14, padding: "14px 16px", display: "flex", alignItems: "center", gap: 12 }}>
-            <div style={{ width: 10, height: 10, borderRadius: "50%", background: statusColor(p), boxShadow: `0 0 8px ${statusColor(p)}` }} />
+          <div key={p.id} style={{ background: "#1a1f2e", borderRadius: 12, padding: "12px 14px", display: "flex", alignItems: "center", gap: 10 }}>
+            <div style={{ width: 8, height: 8, borderRadius: "50%", background: statusColor(p), boxShadow: `0 0 6px ${statusColor(p)}` }} />
             <div style={{ flex: 1 }}>
-              <div style={{ color: "#f0f4ff", fontWeight: 700, fontSize: 14 }}>{p.nom}</div>
-              <div style={{ color: "#8891aa", fontSize: 12 }}>{p.categorie}</div>
-              <div style={{ display: "flex", gap: 12, marginTop: 4 }}>
-                <span style={{ color: "#00d97e", fontSize: 12, fontWeight: 600 }}>{fmt(p.prixVente)}</span>
-                <span style={{ color: "#8891aa", fontSize: 12 }}>{t.prixAchat}: {fmt(p.prixAchat)}</span>
+              <div style={{ color: "#f0f4ff", fontWeight: 700, fontSize: 13 }}>{p.nom}</div>
+              <div style={{ color: "#8891aa", fontSize: 11 }}>{p.categorie}</div>
+              <div style={{ display: "flex", gap: 10, marginTop: 3 }}>
+                <span style={{ color: "#00d97e", fontSize: 11, fontWeight: 600 }}>{fmt(p.prixVente)}</span>
+                <span style={{ color: "#8891aa", fontSize: 11 }}>Achat: {fmt(p.prixAchat)}</span>
               </div>
             </div>
             <div style={{ textAlign: "right" }}>
-              <div style={{ color: statusColor(p), fontWeight: 800, fontSize: 18 }}>{p.quantite}</div>
-              <div style={{ color: "#8891aa", fontSize: 11 }}>{t.unites}</div>
+              <div style={{ color: statusColor(p), fontWeight: 800, fontSize: 16 }}>{p.quantite}</div>
+              <div style={{ color: "#8891aa", fontSize: 10 }}>{t.unites}</div>
             </div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-              <button onClick={() => openEdit(p)} style={{ background: "#252b3b", border: "none", borderRadius: 8, padding: 7, cursor: "pointer", display: "flex" }}><Icon name="edit" size={14} color="#7b8cff" /></button>
-              <button onClick={() => deleteProduit(p.id)} style={{ background: "#252b3b", border: "none", borderRadius: 8, padding: 7, cursor: "pointer", display: "flex" }}><Icon name="trash" size={14} color="#ff6b6b" /></button>
+            <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+              <button onClick={() => openEdit(p)} style={{ background: "#252b3b", border: "none", borderRadius: 7, padding: 6, cursor: "pointer", display: "flex" }}><Icon name="edit" size={13} color="#7b8cff" /></button>
+              <button onClick={() => deleteProduit(p.id)} style={{ background: "#252b3b", border: "none", borderRadius: 7, padding: 6, cursor: "pointer", display: "flex" }}><Icon name="trash" size={13} color="#ff6b6b" /></button>
             </div>
           </div>
         ))}
-        {filtered.length === 0 && <div style={{ color: "#8891aa", textAlign: "center", padding: 40 }}>{t.monStock}</div>}
+        {filtered.length === 0 && <div style={{ color: "#8891aa", textAlign: "center", padding: 30 }}>Aucun produit</div>}
       </div>
       {showModal && (
         <Modal titre={editProduit ? t.modifierProduit : t.nouveauProduit} onClose={() => setShowModal(false)}>
@@ -1080,8 +1036,8 @@ const StockPage = ({ produits, saveProduit, deleteProduit, t }) => {
             <Field label={t.quantite} type="number" value={form.quantite} onChange={v => setForm({ ...form, quantite: v })} placeholder="0" />
             <Field label={t.alerteStockMin} type="number" value={form.alerte} onChange={v => setForm({ ...form, alerte: v })} placeholder="5" />
           </div>
-          {form.prixAchat && form.prixVente && +form.prixAchat > 0 && (
-            <div style={{ background: "rgba(0,217,126,0.1)", border: "1px solid rgba(0,217,126,0.3)", borderRadius: 10, padding: "10px 14px", marginBottom: 16 }}>
+          {+form.prixAchat > 0 && +form.prixVente > 0 && (
+            <div style={{ background: "rgba(0,217,126,0.1)", border: "1px solid rgba(0,217,126,0.3)", borderRadius: 10, padding: "10px 14px", marginBottom: 14 }}>
               <span style={{ color: "#8891aa", fontSize: 12 }}>{t.margeBeneficiaire}: </span>
               <span style={{ color: "#00d97e", fontWeight: 700 }}>{fmt(form.prixVente - form.prixAchat)} ({Math.round(((form.prixVente - form.prixAchat) / form.prixAchat) * 100)}%)</span>
             </div>
@@ -1096,7 +1052,7 @@ const StockPage = ({ produits, saveProduit, deleteProduit, t }) => {
 // ============================================================
 // VENTES PAGE
 // ============================================================
-const VentesPage = ({ produits, ventes, clients, saveVente, saveClient, t, isProprietaire, boutique, setShowFacture }) => {
+const VentesPage = ({ produits, ventes, clients, saveVente, saveClient, t, isProprietaire, boutique, setShowFacture, user }) => {
   const [step, setStep] = useState(1);
   const [panier, setPanier] = useState([]);
   const [search, setSearch] = useState("");
@@ -1107,7 +1063,7 @@ const VentesPage = ({ produits, ventes, clients, saveVente, saveClient, t, isPro
   const [success, setSuccess] = useState(false);
   const [derniereVente, setDerniereVente] = useState(null);
 
-  const filtered = produits.filter(p => p.quantite > 0 && p.nom?.toLowerCase().includes(search.toLowerCase()));
+  const filtered = produits.filter(p => !p.deleted && p.quantite > 0 && p.nom?.toLowerCase().includes(search.toLowerCase()));
   const addPanier = (p) => { const e = panier.find(x => x.id === p.id); if (e) setPanier(panier.map(x => x.id === p.id ? { ...x, qte: x.qte + 1 } : x)); else setPanier([...panier, { ...p, qte: 1 }]); };
   const updateQte = (id, qte) => { if (qte <= 0) setPanier(panier.filter(x => x.id !== id)); else setPanier(panier.map(x => x.id === id ? { ...x, qte } : x)); };
 
@@ -1116,69 +1072,81 @@ const VentesPage = ({ produits, ventes, clients, saveVente, saveClient, t, isPro
   const dette = total - paye;
   const monnaie = montantPaye && modePaiement === "cash" ? Math.max(0, +montantPaye - total) : 0;
 
+  const reset = () => { setSuccess(false); setPanier([]); setStep(1); setSearch(""); setModePaiement("cash"); setMontantPaye(""); setClientId(""); setNouveauClient({ nom: "", telephone: "", quartier: "" }); setDerniereVente(null); };
+
   const confirmer = async () => {
     if (panier.length === 0) return;
     let clientRef = clientId;
     if (clientId === "nouveau" && nouveauClient.nom) {
-      const newId = await saveClient({ ...nouveauClient, dette: dette });
-      clientRef = newId;
+      clientRef = await saveClient({ ...nouveauClient, dette });
     } else if (clientId && dette > 0) {
       const c = clients.find(x => x.id === clientId);
       if (c) await saveClient({ ...c, dette: (c.dette || 0) + dette });
     }
-    const venteData = { produit: panier.map(x => x.nom).join(", "), quantite: panier.reduce((s, x) => s + x.qte, 0), montant: total, paye, mode: modePaiement, clientId: clientRef, items: panier.map(x => ({ id: x.id, nom: x.nom, qte: x.qte, prixVente: x.prixVente })) };
+    const venteData = {
+      produit: panier.map(x => x.nom).join(", "),
+      quantite: panier.reduce((s, x) => s + x.qte, 0),
+      montant: total, paye, mode: modePaiement,
+      clientId: clientRef || null,
+      items: panier.map(x => ({ id: x.id, nom: x.nom, qte: x.qte, prixVente: x.prixVente })),
+    };
     const vente = await saveVente(venteData);
     setDerniereVente(vente);
     setSuccess(true);
   };
 
   if (success) return (
-    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: 400, gap: 16 }}>
-      <div style={{ width: 80, height: 80, borderRadius: "50%", background: "rgba(0,217,126,0.15)", border: "3px solid #00d97e", display: "flex", alignItems: "center", justifyContent: "center" }}>
-        <Icon name="check" size={40} color="#00d97e" />
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: 400, gap: 14 }}>
+      <div style={{ width: 72, height: 72, borderRadius: "50%", background: "rgba(0,217,126,0.15)", border: "3px solid #00d97e", display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <Icon name="check" size={36} color="#00d97e" />
       </div>
-      <div style={{ color: "#00d97e", fontWeight: 800, fontSize: 22 }}>{t.venteEnregistree}</div>
-      <div style={{ color: "#8891aa", fontSize: 13 }}>#{derniereVente?.factureId}</div>
+      <div style={{ color: "#00d97e", fontWeight: 800, fontSize: 20 }}>{t.venteEnregistree}</div>
+      <div style={{ color: "#8891aa", fontSize: 12 }}>#{derniereVente?.factureId}</div>
+      <div style={{ background: "rgba(123,140,255,0.1)", border: "1px solid rgba(123,140,255,0.3)", borderRadius: 10, padding: "10px 16px", textAlign: "center" }}>
+        <div style={{ color: "#8891aa", fontSize: 11 }}>👤 {t.vendu_par}</div>
+        <div style={{ color: "#7b8cff", fontWeight: 700, fontSize: 13 }}>{user.nom || user.telephone}</div>
+      </div>
       <Btn onClick={() => { if (derniereVente) setShowFacture(derniereVente); }} color="#7b8cff">{t.genererFacture}</Btn>
-      <Btn onClick={() => { setSuccess(false); setPanier([]); setStep(1); setSearch(""); setModePaiement("cash"); setMontantPaye(""); setClientId(""); setNouveauClient({ nom: "", telephone: "", quartier: "" }); setDerniereVente(null); }} outlined>{t.retour}</Btn>
+      <Btn onClick={reset} outlined>{t.retour}</Btn>
     </div>
   );
 
   return (
     <div>
-      <h2 style={{ margin: "0 0 16px", color: "#f0f4ff", fontSize: 20, fontWeight: 800 }}>{t.nouvelleVente}</h2>
+      <h2 style={{ margin: "0 0 14px", color: "#f0f4ff", fontSize: 18, fontWeight: 800 }}>{t.nouvelleVente}</h2>
       {step === 1 && (
         <>
-          <input value={search} onChange={e => setSearch(e.target.value)} placeholder={t.chercher} style={{ ...inputStyle, marginBottom: 14, width: "100%", boxSizing: "border-box" }} />
-          <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 16 }}>
+          <input value={search} onChange={e => setSearch(e.target.value)} placeholder={t.chercher} style={{ ...inputStyle, marginBottom: 12, width: "100%", boxSizing: "border-box" }} />
+          <div style={{ display: "flex", flexDirection: "column", gap: 7, marginBottom: 14 }}>
             {filtered.map(p => (
-              <button key={p.id} onClick={() => addPanier(p)} style={{ background: panier.find(x => x.id === p.id) ? "rgba(0,217,126,0.1)" : "#1a1f2e", border: panier.find(x => x.id === p.id) ? "1.5px solid rgba(0,217,126,0.4)" : "1.5px solid transparent", borderRadius: 14, padding: "12px 16px", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <button key={p.id} onClick={() => addPanier(p)} style={{ background: panier.find(x => x.id === p.id) ? "rgba(0,217,126,0.1)" : "#1a1f2e", border: panier.find(x => x.id === p.id) ? "1.5px solid rgba(0,217,126,0.4)" : "1.5px solid transparent", borderRadius: 12, padding: "11px 14px", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                 <div style={{ textAlign: "left" }}>
-                  <div style={{ color: "#f0f4ff", fontWeight: 600, fontSize: 14 }}>{p.nom}</div>
-                  <div style={{ color: "#8891aa", fontSize: 12 }}>{p.quantite} {t.enStock}</div>
+                  <div style={{ color: "#f0f4ff", fontWeight: 600, fontSize: 13 }}>{p.nom}</div>
+                  <div style={{ color: "#8891aa", fontSize: 11 }}>{p.quantite} {t.enStock}</div>
                 </div>
-                <div style={{ color: "#00d97e", fontWeight: 800, fontSize: 14 }}>{fmt(p.prixVente)}</div>
+                <div style={{ color: "#00d97e", fontWeight: 800, fontSize: 13 }}>{fmt(p.prixVente)}</div>
               </button>
             ))}
+            {filtered.length === 0 && <div style={{ color: "#8891aa", textAlign: "center", padding: 20 }}>Aucun produit disponible</div>}
           </div>
           {panier.length > 0 && (
             <>
-              <div style={{ background: "#252b3b", borderRadius: 16, padding: 16, marginBottom: 16 }}>
-                <div style={{ color: "#8891aa", fontWeight: 700, fontSize: 12, marginBottom: 12, textTransform: "uppercase" }}>{t.panier} ({panier.length})</div>
+              <div style={{ background: "#252b3b", borderRadius: 14, padding: 14, marginBottom: 12 }}>
+                <div style={{ color: "#8891aa", fontWeight: 700, fontSize: 11, marginBottom: 10, textTransform: "uppercase" }}>{t.panier} ({panier.length})</div>
                 {panier.map(x => (
-                  <div key={x.id} style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
-                    <div style={{ flex: 1, color: "#f0f4ff", fontSize: 13, fontWeight: 600 }}>{x.nom}</div>
-                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                      <button onClick={() => updateQte(x.id, x.qte - 1)} style={{ background: "#1a1f2e", border: "none", color: "#f0f4ff", width: 28, height: 28, borderRadius: 8, cursor: "pointer", fontSize: 16 }}>−</button>
-                      <span style={{ color: "#f0f4ff", fontWeight: 700, minWidth: 20, textAlign: "center" }}>{x.qte}</span>
-                      <button onClick={() => updateQte(x.id, x.qte + 1)} style={{ background: "#1a1f2e", border: "none", color: "#f0f4ff", width: 28, height: 28, borderRadius: 8, cursor: "pointer", fontSize: 16 }}>+</button>
+                  <div key={x.id} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                    <div style={{ flex: 1, color: "#f0f4ff", fontSize: 12, fontWeight: 600 }}>{x.nom}</div>
+                    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                      <button onClick={() => updateQte(x.id, x.qte - 1)} style={{ background: "#1a1f2e", border: "none", color: "#f0f4ff", width: 26, height: 26, borderRadius: 7, cursor: "pointer", fontSize: 15 }}>−</button>
+                      <span style={{ color: "#f0f4ff", fontWeight: 700, minWidth: 18, textAlign: "center", fontSize: 13 }}>{x.qte}</span>
+                      <button onClick={() => updateQte(x.id, x.qte + 1)} style={{ background: "#1a1f2e", border: "none", color: "#f0f4ff", width: 26, height: 26, borderRadius: 7, cursor: "pointer", fontSize: 15 }}>+</button>
                     </div>
-                    <div style={{ color: "#00d97e", fontWeight: 700, fontSize: 13 }}>{fmt(x.prixVente * x.qte)}</div>
+                    <div style={{ color: "#00d97e", fontWeight: 700, fontSize: 12 }}>{fmt(x.prixVente * x.qte)}</div>
                   </div>
                 ))}
-                <div style={{ borderTop: "1px solid rgba(255,255,255,0.08)", paddingTop: 12, display: "flex", justifyContent: "space-between" }}>
+                <div style={{ borderTop: "1px solid rgba(255,255,255,0.08)", paddingTop: 10, display: "flex", justifyContent: "space-between" }}>
                   <span style={{ color: "#f0f4ff", fontWeight: 700 }}>{t.total}</span>
-                  <span style={{ color: "#00d97e", fontWeight: 800, fontSize: 17 }}>{fmt(total)}</span>
+                  <span style={{ color: "#00d97e", fontWeight: 800, fontSize: 16 }}>{fmt(total)}</span>
                 </div>
               </div>
               <Btn onClick={() => setStep(2)} full>{t.continuer}</Btn>
@@ -1188,25 +1156,25 @@ const VentesPage = ({ produits, ventes, clients, saveVente, saveClient, t, isPro
       )}
       {step === 2 && (
         <>
-          <div style={{ background: "#1a1f2e", borderRadius: 14, padding: 16, marginBottom: 16, textAlign: "center" }}>
-            <div style={{ color: "#8891aa", fontSize: 13 }}>{t.total}</div>
-            <div style={{ color: "#f0f4ff", fontWeight: 800, fontSize: 28 }}>{fmt(total)}</div>
+          <div style={{ background: "#1a1f2e", borderRadius: 12, padding: 14, marginBottom: 14, textAlign: "center" }}>
+            <div style={{ color: "#8891aa", fontSize: 12 }}>{t.total}</div>
+            <div style={{ color: "#f0f4ff", fontWeight: 800, fontSize: 26 }}>{fmt(total)}</div>
           </div>
-          <div style={{ marginBottom: 16 }}>
-            <label style={{ display: "block", color: "#8891aa", fontSize: 12, fontWeight: 600, marginBottom: 8, textTransform: "uppercase" }}>{t.modePayment}</label>
+          <div style={{ marginBottom: 14 }}>
+            <label style={{ display: "block", color: "#8891aa", fontSize: 11, fontWeight: 600, marginBottom: 8, textTransform: "uppercase" }}>{t.modePayment}</label>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
               {[{ val: "cash", label: t.cash }, { val: "mobile", label: t.mobile }, { val: "credit", label: t.credit }].map(m => (
-                <button key={m.val} onClick={() => setModePaiement(m.val)} style={{ background: modePaiement === m.val ? "rgba(0,217,126,0.15)" : "#252b3b", border: modePaiement === m.val ? "1.5px solid #00d97e" : "1.5px solid transparent", borderRadius: 12, padding: "12px 4px", cursor: "pointer", color: modePaiement === m.val ? "#00d97e" : "#8891aa", fontWeight: 700, fontSize: 11, fontFamily: "'Sora', sans-serif" }}>{m.label}</button>
+                <button key={m.val} onClick={() => setModePaiement(m.val)} style={{ background: modePaiement === m.val ? "rgba(0,217,126,0.15)" : "#252b3b", border: modePaiement === m.val ? "1.5px solid #00d97e" : "1.5px solid transparent", borderRadius: 10, padding: "10px 4px", cursor: "pointer", color: modePaiement === m.val ? "#00d97e" : "#8891aa", fontWeight: 700, fontSize: 11, fontFamily: "'Sora', sans-serif" }}>{m.label}</button>
               ))}
             </div>
           </div>
           {modePaiement === "cash" && <Field label={t.montantRecu} type="number" value={montantPaye} onChange={setMontantPaye} placeholder={total.toString()} />}
           {(modePaiement === "credit" || (modePaiement === "cash" && montantPaye && +montantPaye < total)) && (
-            <div style={{ marginBottom: 16 }}>
-              <label style={{ display: "block", color: "#8891aa", fontSize: 12, fontWeight: 600, marginBottom: 8, textTransform: "uppercase" }}>{t.client}</label>
+            <div style={{ marginBottom: 14 }}>
+              <label style={{ display: "block", color: "#8891aa", fontSize: 11, fontWeight: 600, marginBottom: 8, textTransform: "uppercase" }}>{t.client}</label>
               <select value={clientId} onChange={e => setClientId(e.target.value)} style={{ ...inputStyle, marginBottom: 8 }}>
                 <option value="">{t.clientExistant}</option>
-                {clients.map(c => <option key={c.id} value={c.id}>{c.nom}</option>)}
+                {clients.map(c => <option key={c.id} value={c.id}>{c.nom} {c.dette > 0 ? `(${fmt(c.dette)})` : ""}</option>)}
                 <option value="nouveau">{t.nouveauClient}</option>
               </select>
               {clientId === "nouveau" && (
@@ -1218,8 +1186,8 @@ const VentesPage = ({ produits, ventes, clients, saveVente, saveClient, t, isPro
               )}
             </div>
           )}
-          {monnaie > 0 && <div style={{ background: "rgba(255,217,61,0.1)", border: "1px solid rgba(255,217,61,0.3)", borderRadius: 12, padding: 12, marginBottom: 12, textAlign: "center" }}><span style={{ color: "#8891aa", fontSize: 13 }}>{t.monnaie}: </span><span style={{ color: "#ffd93d", fontWeight: 800, fontSize: 18 }}>{fmt(monnaie)}</span></div>}
-          {dette > 0 && <div style={{ background: "rgba(255,107,107,0.1)", border: "1px solid rgba(255,107,107,0.3)", borderRadius: 12, padding: 12, marginBottom: 12, textAlign: "center" }}><span style={{ color: "#8891aa", fontSize: 13 }}>{t.detteCreee}: </span><span style={{ color: "#ff6b6b", fontWeight: 800, fontSize: 18 }}>{fmt(dette)}</span></div>}
+          {monnaie > 0 && <div style={{ background: "rgba(255,217,61,0.1)", border: "1px solid rgba(255,217,61,0.3)", borderRadius: 10, padding: 10, marginBottom: 10, textAlign: "center" }}><span style={{ color: "#8891aa", fontSize: 12 }}>{t.monnaie}: </span><span style={{ color: "#ffd93d", fontWeight: 800, fontSize: 16 }}>{fmt(monnaie)}</span></div>}
+          {dette > 0 && <div style={{ background: "rgba(255,107,107,0.1)", border: "1px solid rgba(255,107,107,0.3)", borderRadius: 10, padding: 10, marginBottom: 10, textAlign: "center" }}><span style={{ color: "#8891aa", fontSize: 12 }}>{t.detteCreee}: </span><span style={{ color: "#ff6b6b", fontWeight: 800, fontSize: 16 }}>{fmt(dette)}</span></div>}
           <div style={{ display: "flex", gap: 10 }}>
             <Btn onClick={() => setStep(1)} outlined full>{t.retour}</Btn>
             <Btn onClick={confirmer} full>{t.confirmer}</Btn>
@@ -1233,7 +1201,7 @@ const VentesPage = ({ produits, ventes, clients, saveVente, saveClient, t, isPro
 // ============================================================
 // DETTES PAGE
 // ============================================================
-const DettesPage = ({ clients, setClients, saveClient, ventes, t }) => {
+const DettesPage = ({ clients, saveClient, ventes, t }) => {
   const [selected, setSelected] = useState(null);
   const [showPaiement, setShowPaiement] = useState(false);
   const [montant, setMontant] = useState("");
@@ -1245,7 +1213,6 @@ const DettesPage = ({ clients, setClients, saveClient, ventes, t }) => {
     const reduction = Math.min(+montant, selected.dette);
     const updated = { ...selected, dette: selected.dette - reduction };
     await saveClient(updated);
-    setClients(prev => prev.map(c => c.id === selected.id ? updated : c));
     setSelected(updated);
     setMontant(""); setShowPaiement(false);
   };
@@ -1257,61 +1224,86 @@ const DettesPage = ({ clients, setClients, saveClient, ventes, t }) => {
     setShowAddClient(false);
   };
 
-  if (selected) return (
-    <div>
-      <button onClick={() => setSelected(null)} style={{ background: "none", border: "none", color: "#8891aa", cursor: "pointer", marginBottom: 16, padding: 0, fontFamily: "'Sora', sans-serif", fontSize: 14 }}>{t.retour}</button>
-      <div style={{ background: "#1a1f2e", borderRadius: 16, padding: 20, marginBottom: 16 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12 }}>
-          <div style={{ width: 48, height: 48, borderRadius: "50%", background: "#252b3b", display: "flex", alignItems: "center", justifyContent: "center" }}>
-            <Icon name="user" size={24} color="#7b8cff" />
-          </div>
-          <div>
-            <div style={{ color: "#f0f4ff", fontWeight: 700, fontSize: 17 }}>{selected.nom}</div>
-            <div style={{ color: "#8891aa", fontSize: 13 }}>📍 {selected.quartier}</div>
-            <div style={{ color: "#8891aa", fontSize: 13 }}>📞 {selected.telephone}</div>
+  if (selected) {
+    const clientVentes = ventes.filter(v => v.clientId === selected.id);
+    return (
+      <div>
+        <button onClick={() => setSelected(null)} style={{ background: "none", border: "none", color: "#8891aa", cursor: "pointer", marginBottom: 14, padding: 0, fontFamily: "'Sora', sans-serif", fontSize: 13 }}>{t.retour}</button>
+        <div style={{ background: "#1a1f2e", borderRadius: 14, padding: 18, marginBottom: 14 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 10 }}>
+            <div style={{ width: 44, height: 44, borderRadius: "50%", background: "#252b3b", display: "flex", alignItems: "center", justifyContent: "center" }}>
+              <Icon name="user" size={22} color="#7b8cff" />
+            </div>
+            <div>
+              <div style={{ color: "#f0f4ff", fontWeight: 700, fontSize: 16 }}>{selected.nom}</div>
+              <div style={{ color: "#8891aa", fontSize: 12 }}>📍 {selected.quartier} | 📞 {selected.telephone}</div>
+            </div>
           </div>
         </div>
+        <div style={{ background: selected.dette > 0 ? "rgba(255,107,107,0.1)" : "rgba(0,217,126,0.1)", border: `1px solid ${selected.dette > 0 ? "rgba(255,107,107,0.3)" : "rgba(0,217,126,0.3)"}`, borderRadius: 12, padding: 18, marginBottom: 14, textAlign: "center" }}>
+          <div style={{ color: "#8891aa", fontSize: 12 }}>{t.detteTotal}</div>
+          <div style={{ color: selected.dette > 0 ? "#ff6b6b" : "#00d97e", fontWeight: 800, fontSize: 26 }}>{fmt(selected.dette)}</div>
+        </div>
+        {selected.dette > 0 && <Btn onClick={() => setShowPaiement(true)} full>{t.enregistrerPaiement}</Btn>}
+        <div style={{ marginTop: 18 }}>
+          <div style={{ color: "#f0f4ff", fontWeight: 700, fontSize: 14, marginBottom: 10 }}>{t.historique}</div>
+          {clientVentes.length === 0 ? <div style={{ color: "#8891aa", fontSize: 12, textAlign: "center", padding: 16 }}>{t.aucuneVente}</div>
+            : clientVentes.map(v => (
+              <div key={v.id} style={{ background: "#1a1f2e", borderRadius: 10, padding: "11px 13px", marginBottom: 7 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
+                  <div style={{ color: "#f0f4ff", fontSize: 12, fontWeight: 600 }}>{v.produit}</div>
+                  <div style={{ color: "#f0f4ff", fontWeight: 700, fontSize: 12 }}>{fmt(v.montant)}</div>
+                </div>
+                {(v.vendeurNom || v.vendeurTel) && (
+                  <div style={{ color: "#7b8cff", fontSize: 10 }}>
+                    👤 {v.vendeurNom || ""}{v.vendeurTel ? ` | ${v.vendeurTel}` : ""}
+                  </div>
+                )}
+                <div style={{ display: "flex", justifyContent: "space-between" }}>
+                  <div style={{ color: "#8891aa", fontSize: 10 }}>#{v.factureId} | {formatDate(getDate(v))}</div>
+                  {v.montant > v.paye && <div style={{ color: "#ff6b6b", fontSize: 10 }}>{t.reste}: {fmt(v.montant - v.paye)}</div>}
+                </div>
+              </div>
+            ))}
+        </div>
+        {showPaiement && (
+          <Modal titre={t.enregistrerPaiement} onClose={() => setShowPaiement(false)}>
+            <div style={{ color: "#8891aa", fontSize: 13, marginBottom: 14 }}>{t.detteTotal}: <strong style={{ color: "#ff6b6b" }}>{fmt(selected.dette)}</strong></div>
+            <Field label={t.montantRecu} type="number" value={montant} onChange={setMontant} placeholder={selected.dette.toString()} />
+            <Btn onClick={enregistrerPaiement} full>{t.confirmer}</Btn>
+          </Modal>
+        )}
       </div>
-      <div style={{ background: selected.dette > 0 ? "rgba(255,107,107,0.1)" : "rgba(0,217,126,0.1)", border: `1px solid ${selected.dette > 0 ? "rgba(255,107,107,0.3)" : "rgba(0,217,126,0.3)"}`, borderRadius: 14, padding: 20, marginBottom: 16, textAlign: "center" }}>
-        <div style={{ color: "#8891aa", fontSize: 13 }}>{t.detteTotal}</div>
-        <div style={{ color: selected.dette > 0 ? "#ff6b6b" : "#00d97e", fontWeight: 800, fontSize: 28 }}>{fmt(selected.dette)}</div>
-      </div>
-      {selected.dette > 0 && <Btn onClick={() => setShowPaiement(true)} full>{t.enregistrerPaiement}</Btn>}
-      {showPaiement && (
-        <Modal titre={t.enregistrerPaiement} onClose={() => setShowPaiement(false)}>
-          <Field label={t.montantRecu} type="number" value={montant} onChange={setMontant} placeholder={selected.dette.toString()} />
-          <Btn onClick={enregistrerPaiement} full>{t.confirmer}</Btn>
-        </Modal>
-      )}
-    </div>
-  );
+    );
+  }
 
   return (
     <div>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-        <h2 style={{ margin: 0, color: "#f0f4ff", fontSize: 20, fontWeight: 800 }}>{t.cahierDettes}</h2>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+        <h2 style={{ margin: 0, color: "#f0f4ff", fontSize: 18, fontWeight: 800 }}>{t.cahierDettes}</h2>
         <Btn onClick={() => setShowAddClient(true)} small>+ {t.client}</Btn>
       </div>
-      <div style={{ background: "rgba(255,107,107,0.1)", border: "1px solid rgba(255,107,107,0.2)", borderRadius: 14, padding: "12px 16px", marginBottom: 16, display: "flex", justifyContent: "space-between" }}>
-        <span style={{ color: "#8891aa", fontSize: 13 }}>{t.totalDettes}</span>
+      <div style={{ background: "rgba(255,107,107,0.1)", border: "1px solid rgba(255,107,107,0.2)", borderRadius: 12, padding: "10px 14px", marginBottom: 14, display: "flex", justifyContent: "space-between" }}>
+        <span style={{ color: "#8891aa", fontSize: 12 }}>{t.totalDettes}</span>
         <span style={{ color: "#ff6b6b", fontWeight: 800 }}>{fmt(clients.reduce((s, c) => s + (c.dette || 0), 0))}</span>
       </div>
       {clients.map(c => (
-        <button key={c.id} onClick={() => setSelected(c)} style={{ background: "#1a1f2e", border: "none", borderRadius: 14, padding: "14px 16px", cursor: "pointer", display: "flex", alignItems: "center", gap: 12, textAlign: "left", width: "100%", marginBottom: 10 }}>
-          <div style={{ width: 42, height: 42, borderRadius: "50%", background: c.dette > 0 ? "rgba(255,107,107,0.15)" : "rgba(0,217,126,0.15)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-            <Icon name="user" size={20} color={c.dette > 0 ? "#ff6b6b" : "#00d97e"} />
+        <button key={c.id} onClick={() => setSelected(c)} style={{ background: "#1a1f2e", border: "none", borderRadius: 12, padding: "12px 14px", cursor: "pointer", display: "flex", alignItems: "center", gap: 10, textAlign: "left", width: "100%", marginBottom: 8 }}>
+          <div style={{ width: 38, height: 38, borderRadius: "50%", background: c.dette > 0 ? "rgba(255,107,107,0.15)" : "rgba(0,217,126,0.15)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <Icon name="user" size={18} color={c.dette > 0 ? "#ff6b6b" : "#00d97e"} />
           </div>
           <div style={{ flex: 1 }}>
-            <div style={{ color: "#f0f4ff", fontWeight: 700, fontSize: 14 }}>{c.nom}</div>
-            <div style={{ color: "#8891aa", fontSize: 12 }}>📍 {c.quartier}</div>
+            <div style={{ color: "#f0f4ff", fontWeight: 700, fontSize: 13 }}>{c.nom}</div>
+            <div style={{ color: "#8891aa", fontSize: 11 }}>📍 {c.quartier}</div>
           </div>
-          <div style={{ color: c.dette > 0 ? "#ff6b6b" : "#00d97e", fontWeight: 800, fontSize: 15 }}>{c.dette > 0 ? fmt(c.dette) : t.solde}</div>
-          <Icon name="arrow" size={16} color="#555" />
+          <div style={{ color: c.dette > 0 ? "#ff6b6b" : "#00d97e", fontWeight: 800, fontSize: 14 }}>{c.dette > 0 ? fmt(c.dette) : t.solde}</div>
+          <Icon name="arrow" size={14} color="#555" />
         </button>
       ))}
+      {clients.length === 0 && <div style={{ color: "#8891aa", textAlign: "center", padding: 30 }}>Aucun client</div>}
       {showAddClient && (
         <Modal titre={t.nouveauClient} onClose={() => setShowAddClient(false)}>
-          <Field label={t.nomComplet} value={newClient.nom} onChange={v => setNewClient({ ...newClient, nom: v })} placeholder="Ex: Fatou" />
+          <Field label={t.nomComplet} value={newClient.nom} onChange={v => setNewClient({ ...newClient, nom: v })} placeholder="Ex: Fatou Diallo" />
           <Field label={t.telephone} type="tel" value={newClient.telephone} onChange={v => setNewClient({ ...newClient, telephone: v })} />
           <Field label={t.quartier} value={newClient.quartier} onChange={v => setNewClient({ ...newClient, quartier: v })} />
           <Btn onClick={ajouterClient} full>{t.ajouterClient}</Btn>
@@ -1325,8 +1317,15 @@ const DettesPage = ({ clients, setClients, saveClient, ventes, t }) => {
 // RAPPORTS PAGE
 // ============================================================
 const RapportsPage = ({ ventes, produits, t, setShowFacture }) => {
-  const aujourd = ventes.filter(v => { const d = v.date?.toDate ? v.date.toDate() : new Date(v.date); return d.toDateString() === new Date().toDateString(); });
-  const total7j = ventes.filter(v => { const d = v.date?.toDate ? v.date.toDate() : new Date(v.date); return d > new Date(Date.now() - 7 * 86400000); });
+  const [filtreVendeur, setFiltreVendeur] = useState("tous");
+
+  // Liste des vendeurs uniques
+  const vendeurs = [...new Map(ventes.filter(v => v.vendeurId).map(v => [v.vendeurId, { id: v.vendeurId, nom: v.vendeurNom || "", tel: v.vendeurTel || "" }])).values()];
+
+  const ventesFiltrees = filtreVendeur === "tous" ? ventes : ventes.filter(v => v.vendeurId === filtreVendeur);
+
+  const aujourd = ventesFiltrees.filter(v => getDate(v).toDateString() === new Date().toDateString());
+  const total7j = ventesFiltrees.filter(v => getDate(v) > new Date(Date.now() - 7 * 86400000));
 
   const calcStats = (list) => ({
     chiffre: list.reduce((s, v) => s + (v.montant || 0), 0),
@@ -1339,45 +1338,67 @@ const RapportsPage = ({ ventes, produits, t, setShowFacture }) => {
   const stats7 = calcStats(total7j);
 
   const prodMap = {};
-  ventes.forEach(v => { prodMap[v.produit] = (prodMap[v.produit] || 0) + (v.quantite || 0); });
+  ventesFiltrees.forEach(v => { prodMap[v.produit] = (prodMap[v.produit] || 0) + (v.quantite || 0); });
   const topProduits = Object.entries(prodMap).sort((a, b) => b[1] - a[1]).slice(0, 5);
 
   const StatCard = ({ label, value, color = "#f0f4ff" }) => (
-    <div style={{ background: "#1a1f2e", borderRadius: 14, padding: "14px 16px" }}>
-      <div style={{ color: "#8891aa", fontSize: 11, fontWeight: 600, textTransform: "uppercase", marginBottom: 6 }}>{label}</div>
-      <div style={{ color, fontWeight: 800, fontSize: 17 }}>{value}</div>
+    <div style={{ background: "#1a1f2e", borderRadius: 12, padding: "12px 14px" }}>
+      <div style={{ color: "#8891aa", fontSize: 10, fontWeight: 600, textTransform: "uppercase", marginBottom: 5 }}>{label}</div>
+      <div style={{ color, fontWeight: 800, fontSize: 15 }}>{value}</div>
     </div>
   );
 
   return (
     <div>
-      <h2 style={{ margin: "0 0 20px", color: "#f0f4ff", fontSize: 20, fontWeight: 800 }}>{t.rapportsTitle}</h2>
-      <div style={{ marginBottom: 20 }}>
-        <div style={{ color: "#00d97e", fontWeight: 700, fontSize: 14, marginBottom: 10 }}>● {t.aujourdhui}</div>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+      <h2 style={{ margin: "0 0 16px", color: "#f0f4ff", fontSize: 18, fontWeight: 800 }}>{t.rapportsTitle}</h2>
+
+      {/* FILTRE PAR VENDEUR */}
+      {vendeurs.length > 0 && (
+        <div style={{ background: "#1a1f2e", borderRadius: 12, padding: 14, marginBottom: 16 }}>
+          <div style={{ color: "#f0f4ff", fontWeight: 700, fontSize: 13, marginBottom: 10, display: "flex", alignItems: "center", gap: 6 }}>
+            <Icon name="filter" size={14} color="#7b8cff" /> {t.filtre_vendeur}
+          </div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <button onClick={() => setFiltreVendeur("tous")} style={{ background: filtreVendeur === "tous" ? "#00d97e" : "#252b3b", border: "none", borderRadius: 8, padding: "6px 12px", color: filtreVendeur === "tous" ? "#fff" : "#8891aa", fontSize: 11, fontWeight: 700, cursor: "pointer", fontFamily: "'Sora', sans-serif" }}>
+              {t.tous_vendeurs}
+            </button>
+            {vendeurs.map(v => (
+              <button key={v.id} onClick={() => setFiltreVendeur(v.id)} style={{ background: filtreVendeur === v.id ? "#7b8cff" : "#252b3b", border: "none", borderRadius: 8, padding: "6px 12px", color: filtreVendeur === v.id ? "#fff" : "#8891aa", fontSize: 11, fontWeight: 700, cursor: "pointer", fontFamily: "'Sora', sans-serif" }}>
+                👤 {v.nom || v.tel}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div style={{ marginBottom: 16 }}>
+        <div style={{ color: "#00d97e", fontWeight: 700, fontSize: 13, marginBottom: 8 }}>● {t.aujourdhui}</div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
           <StatCard label={t.chiffreAffaires} value={fmt(statsJ.chiffre)} />
           <StatCard label={t.encaisse} value={fmt(statsJ.encaisse)} color="#00d97e" />
           <StatCard label={t.dettesCreees} value={fmt(statsJ.dettes)} color="#ff6b6b" />
           <StatCard label={t.nbVentes} value={`${statsJ.nb} ${t.transactions}`} color="#ffd93d" />
         </div>
       </div>
-      <div style={{ marginBottom: 20 }}>
-        <div style={{ color: "#7b8cff", fontWeight: 700, fontSize: 14, marginBottom: 10 }}>● {t.sept_jours}</div>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+
+      <div style={{ marginBottom: 16 }}>
+        <div style={{ color: "#7b8cff", fontWeight: 700, fontSize: 13, marginBottom: 8 }}>● {t.sept_jours}</div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
           <StatCard label={t.chiffreAffaires} value={fmt(stats7.chiffre)} />
           <StatCard label={t.encaisse} value={fmt(stats7.encaisse)} color="#00d97e" />
           <StatCard label={t.dettesCreees} value={fmt(stats7.dettes)} color="#ff6b6b" />
-          <StatCard label={t.nbVentes} value={`${stats7.nb}`} color="#7b8cff" />
+          <StatCard label={t.nbVentes} value={stats7.nb.toString()} color="#7b8cff" />
         </div>
       </div>
+
       {topProduits.length > 0 && (
-        <div style={{ background: "#1a1f2e", borderRadius: 16, padding: 16, marginBottom: 16 }}>
-          <div style={{ color: "#f0f4ff", fontWeight: 700, fontSize: 15, marginBottom: 14 }}>{t.topProduits}</div>
+        <div style={{ background: "#1a1f2e", borderRadius: 14, padding: 14, marginBottom: 14 }}>
+          <div style={{ color: "#f0f4ff", fontWeight: 700, fontSize: 14, marginBottom: 12 }}>{t.topProduits}</div>
           {topProduits.map(([nom, qte], i) => (
-            <div key={nom} style={{ marginBottom: 12 }}>
-              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
-                <span style={{ color: "#f0f4ff", fontSize: 13, fontWeight: 600 }}>#{i + 1} {nom}</span>
-                <span style={{ color: "#8891aa", fontSize: 12 }}>{qte} {t.unites}</span>
+            <div key={nom} style={{ marginBottom: 10 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 3 }}>
+                <span style={{ color: "#f0f4ff", fontSize: 12, fontWeight: 600 }}>#{i + 1} {nom}</span>
+                <span style={{ color: "#8891aa", fontSize: 11 }}>{qte} {t.unites}</span>
               </div>
               <div style={{ height: 5, background: "#252b3b", borderRadius: 99 }}>
                 <div style={{ height: "100%", width: `${(qte / topProduits[0][1]) * 100}%`, background: ["#00d97e", "#7b8cff", "#ffd93d", "#ff9f43", "#ff6b6b"][i], borderRadius: 99 }} />
@@ -1386,20 +1407,30 @@ const RapportsPage = ({ ventes, produits, t, setShowFacture }) => {
           ))}
         </div>
       )}
-      {/* DERNIÈRES VENTES AVEC FACTURES */}
-      <div style={{ background: "#1a1f2e", borderRadius: 16, padding: 16 }}>
-        <div style={{ color: "#f0f4ff", fontWeight: 700, fontSize: 15, marginBottom: 12 }}>{t.dernieresVentes}</div>
-        {ventes.slice(-10).reverse().map(v => (
-          <div key={v.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
-            <div>
-              <div style={{ color: "#f0f4ff", fontSize: 13, fontWeight: 600 }}>{v.produit}</div>
-              <div style={{ color: "#8891aa", fontSize: 11 }}>#{v.factureId}</div>
-            </div>
-            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <div style={{ color: v.mode === "credit" ? "#ff6b6b" : "#00d97e", fontWeight: 700, fontSize: 13 }}>{fmt(v.montant || 0)}</div>
-              <button onClick={() => setShowFacture(v)} style={{ background: "#252b3b", border: "none", borderRadius: 8, padding: 6, cursor: "pointer", display: "flex" }}>
-                <Icon name="invoice" size={14} color="#7b8cff" />
-              </button>
+
+      {/* DERNIÈRES VENTES AVEC VENDEUR */}
+      <div style={{ background: "#1a1f2e", borderRadius: 14, padding: 14 }}>
+        <div style={{ color: "#f0f4ff", fontWeight: 700, fontSize: 14, marginBottom: 10 }}>{t.dernieresVentes}</div>
+        {ventesFiltrees.length === 0 ? (
+          <div style={{ color: "#8891aa", fontSize: 12, textAlign: "center", padding: 16 }}>{t.aucuneVente}</div>
+        ) : ventesFiltrees.slice(-10).reverse().map(v => (
+          <div key={v.id} style={{ padding: "9px 0", borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+              <div style={{ flex: 1 }}>
+                <div style={{ color: "#f0f4ff", fontSize: 12, fontWeight: 600 }}>{v.produit}</div>
+                {(v.vendeurNom || v.vendeurTel) && (
+                  <div style={{ color: "#7b8cff", fontSize: 10 }}>
+                    👤 {v.vendeurNom || ""}{v.vendeurTel ? ` | ${v.vendeurTel}` : ""}
+                  </div>
+                )}
+                <div style={{ color: "#8891aa", fontSize: 10 }}>#{v.factureId}</div>
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                <div style={{ color: v.mode === "credit" ? "#ff6b6b" : "#00d97e", fontWeight: 700, fontSize: 12 }}>{fmt(v.montant || 0)}</div>
+                <button onClick={() => setShowFacture(v)} style={{ background: "#252b3b", border: "none", borderRadius: 7, padding: 5, cursor: "pointer", display: "flex" }}>
+                  <Icon name="invoice" size={13} color="#7b8cff" />
+                </button>
+              </div>
             </div>
           </div>
         ))}
@@ -1414,8 +1445,7 @@ const RapportsPage = ({ ventes, produits, t, setShowFacture }) => {
 export default function PrimoGest() {
   const [langue, setLangue] = useState(() => localStorage.getItem("primogest_langue") || "fr");
   const [user, setUser] = useState(() => {
-    const saved = localStorage.getItem("primogest_user");
-    return saved ? JSON.parse(saved) : null;
+    try { const s = localStorage.getItem("primogest_user"); return s ? JSON.parse(s) : null; } catch { return null; }
   });
   const t = T[langue];
 
