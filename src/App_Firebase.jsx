@@ -425,7 +425,7 @@ createdAt: serverTimestamp(), actif: true,
   essaiFin: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
 });
       onLogin({ id: ref.id, telephone, nomBoutique, adresse, role: "proprietaire", localisation });
-    } catch (e) { setError("Erreur création compte."); setLoading(false); }
+    } catch (e) { setError("Erreur: " + e.message); setLoading(false); }
   };
 
   return (
