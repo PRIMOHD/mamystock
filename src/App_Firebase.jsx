@@ -4,7 +4,12 @@ import {
   collection, doc, setDoc, getDoc, getDocs, addDoc,
   onSnapshot, query, where, orderBy, serverTimestamp, updateDoc
 } from "firebase/firestore";
-
+const PLANS = {
+  essai:    { label: "ESSAI", color: "#7b8cff", produits: 50, ventes: 100, vendeurs: false, bilan: false },
+  gratuit:  { label: "GRATUIT", color: "#ff9f43", produits: 50, ventes: 100, vendeurs: false, bilan: false },
+  pro:      { label: "PRO ⭐", color: "#00d97e", produits: Infinity, ventes: Infinity, vendeurs: true, bilan: true },
+  business: { label: "BUSINESS 🚀", color: "#ffd93d", produits: Infinity, ventes: Infinity, vendeurs: true, bilan: true },
+};
 // ============================================================
 // CONFIGURATION
 // ============================================================
@@ -410,9 +415,15 @@ if (!navigator.onLine) {
         } catch (e) {}
       }
       const ref = await addDoc(collection(db, "users"), {
-        telephone, password, nomBoutique, adresse, role: "proprietaire",
-        localisation, createdAt: serverTimestamp(), actif: true,
-      });
+  telephone, password: hashedPwd, nomBoutique, adresse, role: "proprietaire", localisation,
+plan: "essai",
+essaiDebut: new Date().toISOString(),
+essaiFin: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+createdAt: serverTimestamp(), actif: true,
+  plan: "essai",
+  essaiDebut: new Date().toISOString(),
+  essaiFin: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+});
       onLogin({ id: ref.id, telephone, nomBoutique, adresse, role: "proprietaire", localisation });
     } catch (e) { setError("Erreur création compte."); setLoading(false); }
   };
@@ -615,6 +626,15 @@ const AppBoutique = ({ user, onLogout, t, langue, setLangue }) => {
 
   const boutiqueId = user.boutiqueId || user.id;
   const isProprietaire = user.role === "proprietaire";
+  const plan = user.plan || "essai";
+const lim = PLANS[plan] || PLANS.essai;
+const essaiFin = user.essaiFin ? new Date(user.essaiFin) : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+const essaiExpire = (plan === "essai" || plan === "gratuit") && new Date() > essaiFin;
+const joursRestants = Math.max(0, Math.ceil((essaiFin - new Date()) / (1000 * 60 * 60 * 24)));
+  // Vérification période d'essai
+  const essaiFin = user.essaiFin ? new Date(user.essaiFin) : null;
+  const essaiExpire = essaiFin ? new Date() > essaiFin : false;
+  const joursRestants = essaiFin ? Math.max(0, Math.ceil((essaiFin - new Date()) / (1000 * 60 * 60 * 24))) : 30;
   const boutique = { nom: user.nomBoutique || "Ma Boutique", adresse: user.adresse || "" };
 
   // Clés localStorage
@@ -687,6 +707,10 @@ const AppBoutique = ({ user, onLogout, t, langue, setLangue }) => {
 
   // SAVE PRODUIT
   const saveProduit = async (produit) => {
+    if (!produit.id && produits.filter(p => !p.deleted).length >= lim.produits) {
+  alert(`⚠️ Maximum ${lim.produits} produits avec votre plan.\nContactez-nous: wa.me/23562282320`);
+  return;
+}
     const { id, ...data } = produit;
     if (isOnline) {
       try {
@@ -799,6 +823,10 @@ const AppBoutique = ({ user, onLogout, t, langue, setLangue }) => {
   // AJOUTER VENDEUR
   const ajouterVendeur = async () => {
     if (!newVendeur.nom || !newVendeur.telephone || !newVendeur.password) return;
+    if (!lim.vendeurs) {
+  alert("⚠️ Les vendeurs sont disponibles en plan Pro.\nContactez-nous: wa.me/23562282320");
+  setShowVendeurs(false); return;
+}
     try {
       await addDoc(collection(db, "users"), {
         ...newVendeur, role: "vendeur", boutiqueId,
@@ -808,7 +836,59 @@ const AppBoutique = ({ user, onLogout, t, langue, setLangue }) => {
       setShowVendeurs(false);
     } catch (e) { alert("Erreur: " + e.message); }
   };
-
+if (essaiExpire && user.plan !== "pro" && user.plan !== "business") return (
+  <div style={{
+    minHeight: "100vh", background: "#111520",
+    display: "flex", flexDirection: "column",
+    alignItems: "center", justifyContent: "center",
+    padding: 24, fontFamily: "'Sora', sans-serif",
+    textAlign: "center"
+  }}>
+    <div style={{ fontSize: 60, marginBottom: 20 }}>⏰</div>
+    <div style={{
+      background: "rgba(255,107,107,0.1)",
+      border: "1px solid rgba(255,107,107,0.3)",
+      borderRadius: 20, padding: 32, maxWidth: 360
+    }}>
+      <div style={{ color: "#ff6b6b", fontWeight: 800, fontSize: 22, marginBottom: 12 }}>
+        Période d'essai terminée
+      </div>
+      <div style={{ color: "#8891aa", fontSize: 14, lineHeight: 1.7, marginBottom: 24 }}>
+        Votre période d'essai gratuite de 30 jours est terminée.{"\n"}
+        Contactez-nous sur WhatsApp pour continuer à utiliser PrimoGest.
+      </div>
+      <div style={{ color: "#f0f4ff", fontSize: 13, marginBottom: 8 }}>
+        📞 +235 62 28 23 20
+      </div>
+      <div style={{ color: "#8891aa", fontSize: 12, marginBottom: 24 }}>
+        Boutique : <strong style={{ color: "#f0f4ff" }}>{user.nomBoutique}</strong>
+      </div>
+      <a
+        href={`https://wa.me/23562282320?text=${encodeURIComponent(
+          `Bonjour David 👋,\n\nMon essai PrimoGest est terminé.\n\nBoutique : ${user.nomBoutique}\nTéléphone : ${user.telephone}\n\nJe voudrais continuer à utiliser l'application.`
+        )}`}
+        target="_blank"
+        style={{
+          display: "flex", alignItems: "center", justifyContent: "center", gap: 10,
+          background: "#25D366", border: "none", borderRadius: 12,
+          color: "#fff", padding: "14px 20px", fontSize: 15, fontWeight: 700,
+          cursor: "pointer", fontFamily: "'Sora', sans-serif",
+          textDecoration: "none", marginBottom: 12,
+        }}
+      >
+        📲 Contacter sur WhatsApp
+      </a>
+      <button onClick={onLogout} style={{
+        background: "transparent", border: "1px solid rgba(255,255,255,0.1)",
+        borderRadius: 12, color: "#8891aa", padding: "10px 20px",
+        fontSize: 13, cursor: "pointer", fontFamily: "'Sora', sans-serif",
+        width: "100%"
+      }}>
+        Se déconnecter
+      </button>
+    </div>
+  </div>
+);
   if (loading) return (
     <div style={{ minHeight: "100vh", background: "#111520", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", fontFamily: "'Sora', sans-serif" }}>
       <div style={{ fontSize: 40, marginBottom: 16 }}>{isOnline ? "⏳" : "📡"}</div>
@@ -840,7 +920,17 @@ const AppBoutique = ({ user, onLogout, t, langue, setLangue }) => {
           <div style={{ width: 34, height: 34, borderRadius: 10, background: "linear-gradient(135deg, #00d97e, #00b360)", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, color: "#fff", fontSize: 13 }}>P</div>
           <div>
             <div style={{ color: "#f0f4ff", fontWeight: 800, fontSize: 14 }}>{boutique.nom}</div>
-            <div style={{ color: "#8891aa", fontSize: 10 }}>{isProprietaire ? t.role_proprietaire : `${t.role_vendeur}: ${user.nom || user.telephone}`}</div>
+            <div style={{ color: "#8891aa", fontSize: 10 }}>{isProprietaire ? t.role_proprietaire : `${t.role_vendeur}: ${user.nom || user.telephone}`}
+{isProprietaire && (
+  <span style={{ marginLeft:4, background:`${PLANS[plan]?.color}22`, border:`1px solid ${PLANS[plan]?.color}44`, color:PLANS[plan]?.color, borderRadius:4, padding:"1px 5px", fontSize:8, fontWeight:700 }}>
+    {PLANS[plan]?.label || "ESSAI"}
+  </span>
+)}
+{isProprietaire && (plan === "essai" || plan === "gratuit") && joursRestants <= 7 && joursRestants > 0 && (
+  <span style={{ marginLeft:4, background:"rgba(255,159,67,0.15)", border:"1px solid rgba(255,159,67,0.3)", color:"#ff9f43", borderRadius:4, padding:"1px 5px", fontSize:8, fontWeight:700 }}>
+    ⏰ {joursRestants}j
+  </span>
+)}</div>
             <div style={{ display: "flex", gap: 3, marginTop: 2, alignItems: "center" }}>
               {["fr", "en", "ar"].map(l => (
                 <button key={l} onClick={() => { setLangue(l); localStorage.setItem("primogest_langue", l); }} style={{ background: langue === l ? "#00d97e" : "#252b3b", border: "none", borderRadius: 5, padding: "2px 5px", color: langue === l ? "#fff" : "#8891aa", fontSize: 9, fontWeight: 700, cursor: "pointer" }}>{l.toUpperCase()}</button>
@@ -852,11 +942,16 @@ const AppBoutique = ({ user, onLogout, t, langue, setLangue }) => {
           </div>
         </div>
         <div style={{ display: "flex", gap: 6 }}>
-          {isProprietaire && (
-            <button onClick={() => setShowVendeurs(true)} style={{ background: "#252b3b", border: "none", borderRadius: 10, padding: 8, cursor: "pointer", display: "flex" }}>
+          {isProprietaire && (plan === "essai" || plan === "gratuit") && (
+  <a href={`https://wa.me/23562282320?text=${encodeURIComponent(`Bonjour David 👋,\nJe veux upgrader.\nBoutique : ${boutique.nom}\nTél : ${user.telephone}`)}`}
+    target="_blank"
+    style={{ background:"rgba(0,217,126,0.15)", border:"1px solid rgba(0,217,126,0.3)", borderRadius:9, padding:"5px 8px", display:"flex", alignItems:"center", gap:3, textDecoration:"none" }}>
+    <span style={{ color:"#00d97e", fontSize:8, fontWeight:700 }}>↑ PRO</span>
+  </a>
+)}
+<button style={{ background: "#252b3b", border: "none", borderRadius: 10, padding: 8, cursor: "pointer", display: "flex" }}>
               <Icon name="user" size={16} color="#7b8cff" />
             </button>
-          )}
           <div style={{ position: "relative" }}>
             <div style={{ background: "#252b3b", borderRadius: 10, padding: 8, display: "flex" }}>
               <Icon name="alert" size={16} color="#8891aa" />
@@ -868,7 +963,16 @@ const AppBoutique = ({ user, onLogout, t, langue, setLangue }) => {
           </button>
         </div>
       </div>
-
+{isProprietaire && (plan === "essai" || plan === "gratuit") && joursRestants <= 10 && joursRestants > 0 && (
+  <div style={{ background:"rgba(255,159,67,0.1)", borderBottom:"1px solid rgba(255,159,67,0.2)", padding:"7px 16px", display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+    <span style={{ color:"#ff9f43", fontSize:11, fontWeight:600 }}>⏰ {joursRestants} jours d'essai restants</span>
+    <a href={`https://wa.me/23562282320?text=${encodeURIComponent(`Bonjour, je veux passer au plan Pro.\nBoutique: ${boutique.nom}`)}`}
+      target="_blank"
+      style={{ background:"#ff9f43", borderRadius:8, padding:"4px 10px", color:"#fff", fontSize:10, fontWeight:700, textDecoration:"none" }}>
+      Upgrader →
+    </a>
+  </div>
+)}
       {/* CONTENU */}
       <div style={{ padding: "16px 16px", paddingBottom: 100 }}>
         {page === "dashboard" && <DashboardBoutique ventes={ventes} produits={produits} clients={clients} t={t} langue={langue} isProprietaire={isProprietaire} />}
@@ -1004,7 +1108,14 @@ const StockPage = ({ produits, saveProduit, deleteProduit, t }) => {
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
         <h2 style={{ margin: 0, color: "#f0f4ff", fontSize: 18, fontWeight: 800 }}>{t.monStock}</h2>
-        <Btn onClick={openAdd} small>+ {t.ajouter}</Btn>
+        <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+  {lim.produits !== Infinity && (
+    <span style={{ color: produits.filter(p=>!p.deleted).length >= lim.produits ? "#ff4757" : "#8891aa", fontSize:11, fontWeight:600 }}>
+      {produits.filter(p=>!p.deleted).length}/{lim.produits}
+    </span>
+  )}
+  <Btn onClick={openAdd} small disabled={produits.filter(p=>!p.deleted).length >= lim.produits}>+ {t.ajouter}</Btn>
+</div>
       </div>
       <input value={search} onChange={e => setSearch(e.target.value)} placeholder={t.chercher} style={{ ...inputStyle, marginBottom: 14, width: "100%", boxSizing: "border-box" }} />
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
@@ -1084,6 +1195,14 @@ const VentesPage = ({ produits, ventes, clients, saveVente, saveClient, t, isPro
 
   const confirmer = async () => {
     if (panier.length === 0) return;
+    if (lim.ventes !== Infinity) {
+  const debut = new Date(); debut.setDate(1); debut.setHours(0,0,0,0);
+  const vm = ventes.filter(v => getDate(v) >= debut).length;
+  if (vm >= lim.ventes) {
+    alert(`⚠️ Maximum ${lim.ventes} ventes/mois avec votre plan.\nContactez-nous: wa.me/23562282320`);
+    return;
+  }
+}
     let clientRef = clientId;
     if (clientId === "nouveau" && nouveauClient.nom) {
       clientRef = await saveClient({ ...nouveauClient, dette });
@@ -1481,6 +1600,9 @@ export default function PrimoGest() {
 
  const handleLogin = (userData) => {
   localStorage.setItem("primogest_user", JSON.stringify(userData));
+  const cached = JSON.parse(localStorage.getItem("pg_known_users") || "[]");
+  const exists = cached.find(u => u.telephone === userData.telephone);
+  if (!exists) { cached.push(userData); localStorage.setItem("pg_known_users", JSON.stringify(cached)); }
   // Mémorise les identifiants pour connexion hors ligne
   const cachedUsers = JSON.parse(localStorage.getItem("pg_known_users") || "[]");
   const exists = cachedUsers.find(u => u.telephone === userData.telephone);
