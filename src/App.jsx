@@ -808,7 +808,7 @@ const AppBoutique = ({ user, onLogout, t, langue, setLangue }) => {
       {/* CONTENU */}
       <div style={{ padding: "20px 16px", paddingBottom: 100 }}>
         {page === "dashboard" && <DashboardBoutique ventes={ventes} produits={produits} clients={clients} t={t} langue={langue} isProprietaire={isProprietaire} />}
-        {page === "stock" && isProprietaire && <StockPage produits={produits} saveProduit={saveProduit} deleteProduit={deleteProduit} t={t} />}
+        {page === "stock" && isProprietaire && <StockPage produits={produits} saveProduit={saveProduit} deleteProduit={deleteProduit} t={t} lim={lim} />}
         {page === "ventes" && <VentesPage produits={produits} ventes={ventes} clients={clients} saveVente={saveVente} saveClient={saveClient} t={t} isProprietaire={isProprietaire} boutique={boutique} setShowFacture={setShowFacture} />}
         {page === "dettes" && isProprietaire && <DettesPage clients={clients} setClients={setClients} saveClient={saveClient} ventes={ventes} t={t} />}
         {page === "rapports" && isProprietaire && <RapportsPage ventes={ventes} produits={produits} t={t} setShowFacture={setShowFacture} />}
