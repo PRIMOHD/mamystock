@@ -628,14 +628,11 @@ const AppBoutique = ({ user, onLogout, t, langue, setLangue }) => {
   const isProprietaire = user.role === "proprietaire";
   const plan = user.plan || "essai";
 const lim = PLANS[plan] || PLANS.essai;
-const essaiFin = user.essaiFin ? new Date(user.essaiFin) : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
-const essaiExpire = (plan === "essai" || plan === "gratuit") && new Date() > essaiFin;
-const joursRestants = Math.max(0, Math.ceil((essaiFin - new Date()) / (1000 * 60 * 60 * 24)));
   // Vérification période d'essai
-  const essaiFin = user.essaiFin ? new Date(user.essaiFin) : null;
-  const essaiExpire = essaiFin ? new Date() > essaiFin : false;
-  const joursRestants = essaiFin ? Math.max(0, Math.ceil((essaiFin - new Date()) / (1000 * 60 * 60 * 24))) : 30;
-  const boutique = { nom: user.nomBoutique || "Ma Boutique", adresse: user.adresse || "" };
+const essaiFin = user.essaiFin ? new Date(user.essaiFin) : null;
+const essaiExpire = essaiFin ? new Date() > essaiFin : false;
+const joursRestants = essaiFin ? Math.max(0, Math.ceil((essaiFin - new Date()) / (1000 * 60 * 60 * 24))) : 30;
+const boutique = { nom: user.nomBoutique || "Ma Boutique", adresse: user.adresse || "" };
 
   // Clés localStorage
   const KEY_P = `pg_produits_${boutiqueId}`;
@@ -1605,7 +1602,7 @@ export default function PrimoGest() {
   if (!exists) { cached.push(userData); localStorage.setItem("pg_known_users", JSON.stringify(cached)); }
   // Mémorise les identifiants pour connexion hors ligne
   const cachedUsers = JSON.parse(localStorage.getItem("pg_known_users") || "[]");
-  const exists = cachedUsers.find(u => u.telephone === userData.telephone);
+  let existsUser = cachedUsers.find(u => u.telephone === userData.telephone);
   if (!exists) {
     cachedUsers.push(userData);
     localStorage.setItem("pg_known_users", JSON.stringify(cachedUsers));
