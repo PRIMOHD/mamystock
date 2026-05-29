@@ -538,6 +538,9 @@ const AdminDashboard = ({ user, onLogout, t, langue, setLangue }) => {
           {["fr", "en", "ar"].map(l => (
             <button key={l} onClick={() => { setLangue(l); localStorage.setItem("primogest_langue", l); }} style={{ background: langue === l ? "#00d97e" : "#252b3b", border: "none", borderRadius: 6, padding: "3px 8px", color: langue === l ? "#fff" : "#8891aa", fontSize: 10, fontWeight: 700, cursor: "pointer" }}>{l.toUpperCase()}</button>
           ))}
+          <button onClick={() => setShowChangePwd(true)} style={{ background: "#252b3b", border: "none", borderRadius: 9, padding: 6, cursor: "pointer", display: "flex" }}>
+  <Icon name="edit" size={14} color="#8891aa" />
+</button>
           <button onClick={onLogout} style={{ background: "#252b3b", border: "none", borderRadius: 10, padding: 8, cursor: "pointer", display: "flex", marginLeft: 4 }}>
             <Icon name="logout" size={16} color="#ff6b6b" />
           </button>
