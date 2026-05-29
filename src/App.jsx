@@ -796,6 +796,9 @@ const AppBoutique = ({ user, onLogout, t, langue, setLangue }) => {
             </div>
             {notifCount > 0 && <div style={{ position: "absolute", top: -4, right: -4, width: 18, height: 18, background: "#ff4757", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontSize: 10, fontWeight: 800, border: "2px solid #1a1f2e" }}>{notifCount}</div>}
           </div>
+          <button onClick={() => setShowChangePwd(true)} style={{ background: "#252b3b", border: "none", borderRadius: 9, padding: 6, cursor: "pointer", display: "flex" }}>
+  <Icon name="edit" size={15} color="#8891aa" />
+</button>
           <button onClick={onLogout} style={{ background: "#252b3b", border: "none", borderRadius: 10, padding: 8, cursor: "pointer", display: "flex" }}>
             <Icon name="logout" size={18} color="#ff6b6b" />
           </button>
