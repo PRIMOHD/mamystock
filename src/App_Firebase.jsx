@@ -15,7 +15,11 @@ const PLANS = {
 // ============================================================
 const ADMIN_PHONE = "+23562282320";
 const ADMIN_PASSWORD = "primogest@admin2026";
-
+const hashPwd = async (pwd) => {
+  const data = new TextEncoder().encode(pwd + "primogest_salt_2026");
+  const hash = await crypto.subtle.digest("SHA-256", data);
+  return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, "0")).join("");
+};
 // ============================================================
 // TRADUCTIONS
 // ============================================================
