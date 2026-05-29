@@ -837,6 +837,12 @@ const AppBoutique = ({ user, onLogout, t, langue, setLangue }) => {
           <Field label={t.tel_vendeur} type="tel" value={newVendeur.telephone} onChange={v => setNewVendeur({ ...newVendeur, telephone: v })} placeholder="+235 XX XX XX XX" />
           <Field label={t.mdp_vendeur} type="password" value={newVendeur.password} onChange={v => setNewVendeur({ ...newVendeur, password: v })} placeholder="Mot de passe" />
           <Btn onClick={ajouterVendeur} full>{t.creer_vendeur}</Btn>
+          <div style={{ marginTop: 16, borderTop: "1px solid rgba(255,255,255,0.08)", paddingTop: 16 }}>
+  <button onClick={() => { setShowVendeurs(false); setShowChangePwd(true); }}
+    style={{ width:"100%", background:"rgba(123,140,255,0.1)", border:"1px solid rgba(123,140,255,0.3)", borderRadius:12, padding:"12px 16px", color:"#7b8cff", fontSize:14, fontWeight:700, cursor:"pointer", fontFamily:"'Sora',sans-serif", display:"flex", alignItems:"center", justifyContent:"center", gap:10 }}>
+    🔐 Changer mon mot de passe
+  </button>
+</div>
         </Modal>
       )}
 {showChangePwd && (
