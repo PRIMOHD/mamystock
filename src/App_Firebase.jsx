@@ -414,15 +414,13 @@ if (!navigator.onLine) {
           localisation = { lat: pos.coords.latitude, lng: pos.coords.longitude };
         } catch (e) {}
       }
+      const hashedPwd = await hashPwd(password);
       const ref = await addDoc(collection(db, "users"), {
   telephone, password: hashedPwd, nomBoutique, adresse, role: "proprietaire", localisation,
 plan: "essai",
 essaiDebut: new Date().toISOString(),
 essaiFin: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
 createdAt: serverTimestamp(), actif: true,
-  plan: "essai",
-  essaiDebut: new Date().toISOString(),
-  essaiFin: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
 });
       onLogin({ id: ref.id, telephone, nomBoutique, adresse, role: "proprietaire", localisation });
     } catch (e) { setError("Erreur: " + e.message); setLoading(false); }
