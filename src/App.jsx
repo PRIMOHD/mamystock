@@ -833,7 +833,18 @@ const AppBoutique = ({ user, onLogout, t, langue, setLangue }) => {
           <Btn onClick={ajouterVendeur} full>{t.creer_vendeur}</Btn>
         </Modal>
       )}
-
+{showChangePwd && (
+  <Modal titre="🔐 Changer mot de passe" onClose={() => { setShowChangePwd(false); setOldPwd(""); setNewPwd(""); setPwdMsg(""); }}>
+    <Field label="Ancien mot de passe" type="password" value={oldPwd} onChange={setOldPwd} placeholder="Votre mot de passe actuel" />
+    <Field label="Nouveau mot de passe" type="password" value={newPwd} onChange={setNewPwd} placeholder="Nouveau mot de passe" />
+    {pwdMsg && (
+      <div style={{ background: pwdMsg.includes("✅") ? "rgba(0,217,126,0.1)" : "rgba(255,71,87,0.1)", border: `1px solid ${pwdMsg.includes("✅") ? "rgba(0,217,126,0.3)" : "rgba(255,71,87,0.3)"}`, borderRadius: 10, padding: "10px 14px", marginBottom: 14, color: pwdMsg.includes("✅") ? "#00d97e" : "#ff4757", fontSize: 13, textAlign: "center" }}>
+        {pwdMsg}
+      </div>
+    )}
+    <Btn onClick={changerMotDePasse} full>🔐 Confirmer le changement</Btn>
+  </Modal>
+)}
       {/* FACTURE */}
       {showFacture && <Facture vente={showFacture} boutique={boutique} onClose={() => setShowFacture(null)} t={t} />}
     </div>
