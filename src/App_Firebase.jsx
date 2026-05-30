@@ -655,7 +655,12 @@ const AppBoutique = ({ user, onLogout, t, langue, setLangue }) => {
   const [oldPwd,setOldPwd] = useState("");
   const [newPwd,setNewPwd] = useState("");
   const [pwdMsg,setPwdMsg] = useState("");
-
+const [isPC, setIsPC] = useState(window.innerWidth >= 900);
+useEffect(() => {
+  const handleResize = () => setIsPC(window.innerWidth >= 900);
+  window.addEventListener("resize", handleResize);
+  return () => window.removeEventListener("resize", handleResize);
+}, []);
   const bid = user.boutiqueId || user.id;
   const isProp = user.role === "proprietaire";
   const boutique = { nom:user.nomBoutique||"Ma Boutique", adresse:user.adresse||"" };
@@ -865,9 +870,9 @@ const AppBoutique = ({ user, onLogout, t, langue, setLangue }) => {
   const nbProduits = produits.filter(p=>!p.deleted).length;
 
   return (
-    <div style={{maxWidth:480,margin:"0 auto",minHeight:"100vh",background:"#111520",fontFamily:"'Sora',sans-serif",direction:langue==="ar"?"rtl":"ltr"}}>
+    <div style={{maxWidth:isPC?"100%":"480px",margin:"0 auto",minHeight:"100vh",background:"#111520",fontFamily:"'Sora',sans-serif",direction:langue==="ar"?"rtl":"ltr",display:isPC?"flex":"block"}}>
       {/* HEADER */}
-      <div style={{background:"#1a1f2e",padding:"10px 14px",borderBottom:"1px solid rgba(255,255,255,0.05)",display:"flex",alignItems:"center",justifyContent:"space-between",position:"sticky",top:0,zIndex:100}}>
+      <div style={{background:"#1a1f2e",padding:isPC?"14px 30px":"10px 14px",borderBottom:"1px solid rgba(255,255,255,0.05)",display:isPC?"none":"flex",alignItems:"center",justifyContent:"space-between",position:"sticky",top:0,zIndex:100}}>
         <div style={{display:"flex",alignItems:"center",gap:8}}>
           <div style={{width:32,height:32,borderRadius:9,background:"linear-gradient(135deg,#00d97e,#00b360)",display:"flex",alignItems:"center",justifyContent:"center",fontWeight:800,color:"#fff",fontSize:12}}>P</div>
           <div>
@@ -924,7 +929,7 @@ const AppBoutique = ({ user, onLogout, t, langue, setLangue }) => {
       )}
 
       {/* CONTENU */}
-      <div style={{padding:"14px",paddingBottom:100}}>
+      <div style={{padding:isPC?"30px":"14px",paddingBottom:isPC?30:100,marginLeft:isPC?220:0,flex:isPC?1:undefined,maxWidth:isPC?"none":"480px"}}>
         {page==="dashboard"&&<DashBoutique ventes={ventes} produits={produits} clients={clients} t={t} langue={langue}/>}
         {page==="stock"&&isProp&&<StockPage produits={produits} saveProduit={saveProduit} delProduit={delProduit} t={t} nbProduits={nbProduits} lim={lim}/>}
         {page==="ventes"&&<VentesPage produits={produits} ventes={ventes} clients={clients} saveVente={saveVente} saveClient={saveClient} t={t} isProp={isProp} boutique={boutique} setShowFacture={setShowFacture} user={user}/>}
@@ -933,19 +938,64 @@ const AppBoutique = ({ user, onLogout, t, langue, setLangue }) => {
       </div>
 
       {/* NAVBAR */}
-      <div style={{position:"fixed",bottom:0,left:"50%",transform:"translateX(-50%)",width:"100%",maxWidth:480,background:"#1a1f2e",borderTop:"1px solid rgba(255,255,255,0.06)",display:"flex",padding:"7px 0 11px",boxShadow:"0 -8px 32px rgba(0,0,0,0.4)"}}>
-        {pages.map(p=>(
-          <button key={p.id} onClick={()=>setPage(p.id)} style={{flex:1,background:"none",border:"none",cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:3,padding:"5px 0"}}>
-            {p.id==="ventes"
-              ?<div style={{width:46,height:46,borderRadius:"50%",background:page===p.id?"linear-gradient(135deg,#00d97e,#00b360)":"#252b3b",display:"flex",alignItems:"center",justifyContent:"center",marginTop:-16,boxShadow:page===p.id?"0 4px 20px rgba(0,217,126,0.5)":"0 4px 12px rgba(0,0,0,0.3)",border:"3px solid #1a1f2e"}}>
-                <Icon name={p.icon} size={19} color="#fff"/>
-              </div>
-              :<Icon name={p.icon} size={19} color={page===p.id?"#00d97e":"#555e7a"}/>
-            }
-            <span style={{fontSize:8,fontWeight:700,color:page===p.id?"#00d97e":"#555e7a"}}>{p.label}</span>
-          </button>
+      {isPC ? (
+  // SIDEBAR PC
+  <div style={{width:220,background:"#1a1f2e",borderRight:"1px solid rgba(255,255,255,0.06)",display:"flex",flexDirection:"column",position:"fixed",left:0,top:0,bottom:0,padding:"20px 0",zIndex:100}}>
+    <div style={{padding:"0 20px 24px",borderBottom:"1px solid rgba(255,255,255,0.06)"}}>
+      <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:16}}>
+        <div style={{width:36,height:36,borderRadius:10,background:"linear-gradient(135deg,#00d97e,#00b360)",display:"flex",alignItems:"center",justifyContent:"center",fontWeight:800,color:"#fff",fontSize:14}}>P</div>
+        <div>
+          <div style={{color:"#f0f4ff",fontWeight:800,fontSize:14}}>PrimoGest</div>
+          <div style={{color:"#00d97e",fontSize:9,fontWeight:700}}>{planInfo.label}</div>
+        </div>
+      </div>
+      <div style={{color:"#f0f4ff",fontWeight:700,fontSize:13}}>{boutique.nom}</div>
+      <div style={{color:"#8891aa",fontSize:11}}>{isProp?t.role_proprietaire:`${t.role_vendeur}: ${user.nom||user.telephone}`}</div>
+      <div style={{display:"flex",gap:3,marginTop:8}}>
+        {["fr","en","ar"].map(l=>(
+          <button key={l} onClick={()=>{setLangue(l);localStorage.setItem("primogest_langue",l);}} style={{background:langue===l?"#00d97e":"#252b3b",border:"none",borderRadius:4,padding:"2px 6px",color:langue===l?"#fff":"#8891aa",fontSize:9,fontWeight:700,cursor:"pointer"}}>{l.toUpperCase()}</button>
         ))}
       </div>
+    </div>
+    <div style={{flex:1,padding:"16px 12px",display:"flex",flexDirection:"column",gap:4}}>
+      {pages.map(p=>(
+        <button key={p.id} onClick={()=>setPage(p.id)} style={{display:"flex",alignItems:"center",gap:12,padding:"10px 12px",borderRadius:10,border:"none",background:page===p.id?"rgba(0,217,126,0.1)":"transparent",cursor:"pointer",width:"100%",textAlign:"left"}}>
+          <Icon name={p.icon} size={18} color={page===p.id?"#00d97e":"#555e7a"}/>
+          <span style={{color:page===p.id?"#00d97e":"#8891aa",fontWeight:600,fontSize:13,fontFamily:"'Sora',sans-serif"}}>{p.label}</span>
+        </button>
+      ))}
+    </div>
+    <div style={{padding:"16px 12px",borderTop:"1px solid rgba(255,255,255,0.06)",display:"flex",flexDirection:"column",gap:8}}>
+      <div style={{background:isOnline?"rgba(0,217,126,0.1)":"rgba(255,71,87,0.1)",border:`1px solid ${isOnline?"#00d97e":"#ff4757"}33`,borderRadius:8,padding:"6px 10px",fontSize:11,color:isOnline?"#00d97e":"#ff4757",fontWeight:600,textAlign:"center"}}>
+        {syncing?t.sync_en_cours:isOnline?t.online:t.offline}
+      </div>
+      {isProp&&plan==="essai"&&(
+        <a href={`https://wa.me/${WHATSAPP}?text=${encodeURIComponent(`Bonjour David, je veux passer au plan Pro.\nBoutique: ${boutique.nom}`)}`} target="_blank"
+          style={{display:"flex",alignItems:"center",justifyContent:"center",gap:6,background:"rgba(0,217,126,0.15)",border:"1px solid rgba(0,217,126,0.3)",borderRadius:8,padding:"8px",color:"#00d97e",fontSize:11,fontWeight:700,textDecoration:"none"}}>
+          ↑ Upgrader en Pro
+        </a>
+      )}
+      <button onClick={onLogout} style={{display:"flex",alignItems:"center",justifyContent:"center",gap:8,background:"rgba(255,107,107,0.1)",border:"1px solid rgba(255,107,107,0.2)",borderRadius:8,padding:"8px",color:"#ff6b6b",fontSize:11,fontWeight:700,cursor:"pointer",fontFamily:"'Sora',sans-serif"}}>
+        <Icon name="logout" size={14} color="#ff6b6b"/> Déconnexion
+      </button>
+    </div>
+  </div>
+) : (
+  // NAVBAR MOBILE (existante)
+  <div style={{position:"fixed",bottom:0,left:"50%",transform:"translateX(-50%)",width:"100%",maxWidth:480,background:"#1a1f2e",borderTop:"1px solid rgba(255,255,255,0.06)",display:"flex",padding:"7px 0 11px",boxShadow:"0 -8px 32px rgba(0,0,0,0.4)"}}>
+    {pages.map(p=>(
+      <button key={p.id} onClick={()=>setPage(p.id)} style={{flex:1,background:"none",border:"none",cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:3,padding:"5px 0"}}>
+        {p.id==="ventes"
+          ?<div style={{width:46,height:46,borderRadius:"50%",background:page===p.id?"linear-gradient(135deg,#00d97e,#00b360)":"#252b3b",display:"flex",alignItems:"center",justifyContent:"center",marginTop:-16,boxShadow:page===p.id?"0 4px 20px rgba(0,217,126,0.5)":"0 4px 12px rgba(0,0,0,0.3)",border:"3px solid #1a1f2e"}}>
+            <Icon name={p.icon} size={19} color="#fff"/>
+          </div>
+          :<Icon name={p.icon} size={19} color={page===p.id?"#00d97e":"#555e7a"}/>
+        }
+        <span style={{fontSize:8,fontWeight:700,color:page===p.id?"#00d97e":"#555e7a"}}>{p.label}</span>
+      </button>
+    ))}
+  </div>
+)}
 
       {/* MODAL VENDEURS */}
       {showVendeurs&&(
