@@ -1,4 +1,4 @@
-const CACHE = "primogest-v4";
+const CACHE = "primogest-v5";
 const ASSETS = ["/", "/index.html"];
 
 self.addEventListener("install", e => {
@@ -18,12 +18,9 @@ self.addEventListener("activate", e => {
 });
 
 self.addEventListener("fetch", e => {
-  // Ignore les requêtes POST et non-GET
   if (e.request.method !== "GET") return;
-  // Ignore les requêtes Firebase
   if (e.request.url.includes("firestore.googleapis.com")) return;
   if (e.request.url.includes("firebase")) return;
-
   e.respondWith(
     caches.match(e.request).then(cached => {
       if (cached) return cached;
