@@ -932,7 +932,7 @@ useEffect(() => {
       <div style={{padding:isPC?"30px":"14px",paddingBottom:isPC?30:100,marginLeft:isPC?220:0,flex:isPC?1:undefined,maxWidth:isPC?"none":"480px"}}>
         {page==="dashboard"&&<DashBoutique ventes={ventes} produits={produits} clients={clients} t={t} langue={langue}/>}
         {page==="stock"&&isProp&&<StockPage produits={produits} saveProduit={saveProduit} delProduit={delProduit} t={t} nbProduits={nbProduits} lim={lim}/>}
-        {page==="ventes"&&<VentesPage produits={produits} ventes={ventes} clients={clients} saveVente={saveVente} saveClient={saveClient} t={t} isProp={isProp} boutique={boutique} setShowFacture={setShowFacture} user={user}/>}
+        {page==="ventes"&&<VentesPage produits={produits} ventes={ventes} clients={clients} saveVente={saveVente} saveClient={saveClient} t={t} isProp={isProp} boutique={boutique} setShowFacture={setShowFacture} user={user} lim={lim}/>}
         {page==="dettes"&&isProp&&<DettesPage clients={clients} saveClient={saveClient} ventes={ventes} t={t} boutique={boutique}/>}
         {page==="rapports"&&isProp&&<RapportsPage ventes={ventes} produits={produits} t={t} setShowFacture={setShowFacture} lim={lim}/>}
       </div>
@@ -1203,7 +1203,7 @@ const StockPage = ({ produits, saveProduit, delProduit, t, nbProduits, lim }) =>
 };
 
 // ── VENTES PAGE ──
-const VentesPage = ({ produits, ventes, clients, saveVente, saveClient, t, isProp, boutique, setShowFacture, user }) => {
+const VentesPage = ({ produits, ventes, clients, saveVente, saveClient, t, isProp, boutique, setShowFacture, user, lim }) => {
   const [step,setStep] = useState(1);
   const [pan,setPan] = useState([]);
   const [search,setSearch] = useState("");
