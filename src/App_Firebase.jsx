@@ -1237,10 +1237,16 @@ if (modeClient==="existant" && selectedClientId) {
   cr = newId;
   clientNom = newClientData.nom;
   clientTel = newClientData.telephone||"";
-} else if (mode==="credit" && cid) {
-  cr = cid;
-  const c = clients.find(x=>x.id===cid);
-  if (c) { clientNom=c.nom; clientTel=c.telephone||""; if(det>0) await saveClient({...c,dette:(c.dette||0)+det}); }
+} else if (mode==="credit") {
+  if (selectedClientId) {
+    cr = selectedClientId;
+    const c = clients.find(x=>x.id===selectedClientId);
+    if (c) { clientNom=c.nom; clientTel=c.telephone||""; if(det>0) await saveClient({...c,dette:(c.dette||0)+det}); }
+  } else if (cid) {
+    cr = cid;
+    const c = clients.find(x=>x.id===cid);
+    if (c) { clientNom=c.nom; clientTel=c.telephone||""; if(det>0) await saveClient({...c,dette:(c.dette||0)+det}); }
+  }
 }
 {vente.clientNom&&(
   <div style={{background:"rgba(255,159,67,0.1)",border:"1px solid rgba(255,159,67,0.3)",borderRadius:8,padding:"8px 12px",marginBottom:10}}>
