@@ -774,7 +774,7 @@ useEffect(() => {
       }
     }
     const fid = genId();
-    const nv = { ...vd, boutiqueId:bid, factureId:fid, date:new Date().toISOString(), vendeurId:user.id, vendeurNom:user.nom||"", vendeurTel:user.telephone||"", synced:false };
+    const nv = { ...vd, boutiqueId:bid, factureId:fid, date:new Date().toISOString(), vendeurId:user.id, vendeurNom:user.nom||"", vendeurTel:user.telephone||"", clientNom:vd.clientNom||"", clientTel:vd.clientTel||"", synced:false };
     const upP = produits.map(p=>{ const it=(vd.items||[]).find(x=>x.id===p.id); return it?{...p,quantite:p.quantite-it.qte}:p; });
     setProduits(upP); localStorage.setItem(KP,JSON.stringify(upP));
     const nvi = {...nv,id:Date.now().toString()};
@@ -783,7 +783,7 @@ useEffect(() => {
     if (isOnline) {
       try {
         const {id:_i,synced:_s,...data} = nvi;
-        const r = await addDoc(collection(db,"ventes"), {...data,createdAt:serverTimestamp()});
+                const r = await addDoc(collection(db,"ventes"), {...data,createdAt:serverTimestamp()});
         const sv = upV.map(v=>v.id===nvi.id?{...v,id:r.id,synced:true}:v);
         setVentes(sv); localStorage.setItem(KV,JSON.stringify(sv));
         for (const it of vd.items||[]) {
