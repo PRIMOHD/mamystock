@@ -964,6 +964,12 @@ useEffect(() => {
     <span style={{color:"#8891aa",fontWeight:600,fontSize:13,fontFamily:"'Sora',sans-serif"}}>{t.vendeurs}</span>
   </button>
 )}
+{pages.map(p=>(
+  <button key={p.id} onClick={()=>setPage(p.id)} style={{display:"flex",alignItems:"center",gap:12,padding:"12px 14px",borderRadius:10,border:"none",background:page===p.id?"rgba(0,217,126,0.1)":"transparent",cursor:"pointer",width:"100%",textAlign:"left",transition:"all 0.2s"}}>
+    <Icon name={p.icon} size={18} color={page===p.id?"#00d97e":"#555e7a"}/>
+    <span style={{color:page===p.id?"#00d97e":"#8891aa",fontWeight:600,fontSize:13,fontFamily:"'Sora',sans-serif"}}>{p.label}</span>
+  </button>
+))}
     </div>
     <div style={{padding:"16px 12px",borderTop:"1px solid rgba(255,255,255,0.06)",display:"flex",flexDirection:"column",gap:8}}>
       <div style={{background:isOnline?"rgba(0,217,126,0.1)":"rgba(255,71,87,0.1)",border:`1px solid ${isOnline?"#00d97e":"#ff4757"}33`,borderRadius:8,padding:"6px 10px",fontSize:11,color:isOnline?"#00d97e":"#ff4757",fontWeight:600,textAlign:"center"}}>
