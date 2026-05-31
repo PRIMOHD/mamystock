@@ -1205,8 +1205,9 @@ const VentesPage = ({ produits, ventes, clients, saveVente, saveClient, t, isPro
   const [mpay,setMpay] = useState("");
   const [cid,setCid] = useState("");
   const [nc,setNc] = useState({nom:"",telephone:"",quartier:""});
-  const [saveClient_opt,setSaveClientOpt] = useState(false);
-  const [quickClient,setQuickClient] = useState({nom:"",telephone:""});
+  const [modeClient,setModeClient] = useState("anonyme");
+  const [selectedClientId,setSelectedClientId] = useState("");
+  const [newClientData,setNewClientData] = useState({nom:"",telephone:""});
   const [ok,setOk] = useState(false);
   const [last,setLast] = useState(null);
 
@@ -1218,20 +1219,36 @@ const VentesPage = ({ produits, ventes, clients, saveVente, saveClient, t, isPro
   const det = tot - pay;
   const mon = mpay&&mode==="cash"?Math.max(0,+mpay-tot):0;
 
-  const reset = () => { setOk(false);setPan([]);setStep(1);setSearch("");setMode("cash");setMpay("");setCid("");setNc({nom:"",telephone:"",quartier:""});setLast(null);setSaveClientOpt(false);setQuickClient({nom:"",telephone:""}); };
+  const reset = () => { setOk(false);setPan([]);setStep(1);setSearch("");setMode("cash");setMpay("");setCid("");setNc({nom:"",telephone:"",quartier:""});setLast(null);setModeClient("anonyme");setSelectedClientId("");setNewClientData({nom:"",telephone:""}); };
 
   const conf = async () => {
     if (pan.length===0) return;
-    let cr = cid;
-    if (cid==="nouveau"&&nc.nom) { cr = await saveClient({...nc,dette:det}); }
-    if (saveClient_opt && quickClient.nom && mode !== "credit") {
-  const existSnap = await getDocs(query(collection(db,"clients"), where("telephone","==",quickClient.telephone), where("boutiqueId","==",bid)));
-  if (existSnap.empty) {
-    await saveClient({...quickClient,quartier:"",dette:0});
-  }
+  let cr = null;
+let clientNom = "";
+let clientTel = "";
+
+if (modeClient==="existant" && selectedClientId) {
+  cr = selectedClientId;
+  const c = clients.find(x=>x.id===selectedClientId);
+  if (c) { clientNom=c.nom; clientTel=c.telephone||""; }
+  if (det>0 && c) await saveClient({...c,dette:(c.dette||0)+det});
+} else if (modeClient==="nouveau" && newClientData.nom) {
+  const newId = await saveClient({...newClientData,quartier:"",dette:det});
+  cr = newId;
+  clientNom = newClientData.nom;
+  clientTel = newClientData.telephone||"";
+} else if (mode==="credit" && cid) {
+  cr = cid;
+  const c = clients.find(x=>x.id===cid);
+  if (c) { clientNom=c.nom; clientTel=c.telephone||""; if(det>0) await saveClient({...c,dette:(c.dette||0)+det}); }
 }
-    else if (cid&&det>0) { const c=clients.find(x=>x.id===cid); if(c) await saveClient({...c,dette:(c.dette||0)+det}); }
-    const vd = { produit:pan.map(x=>x.nom).join(", "), quantite:pan.reduce((s,x)=>s+x.qte,0), montant:tot, paye:pay, mode, clientId:cr||null, items:pan.map(x=>({id:x.id,nom:x.nom,qte:x.qte,prixVente:x.prixVente})) };
+{vente.clientNom&&(
+  <div style={{background:"rgba(255,159,67,0.1)",border:"1px solid rgba(255,159,67,0.3)",borderRadius:8,padding:"8px 12px",marginBottom:10}}>
+    <span style={{color:"#ff9f43",fontSize:12}}>👤 Client: </span>
+    <strong style={{color:"#f0f4ff",fontSize:12}}>{vente.clientNom}</strong>
+    {vente.clientTel&&<span style={{color:"#8891aa",fontSize:11}}> | {vente.clientTel}</span>}
+  </div>
+)}
     const v = await saveVente(vd);
     if (v) { setLast(v); setOk(true); }
   };
@@ -1314,40 +1331,29 @@ const VentesPage = ({ produits, ventes, clients, saveVente, saveClient, t, isPro
             </div>
           </div>
           {mode==="cash"&&<Field label={t.montantRecu} type="number" value={mpay} onChange={setMpay} placeholder={tot.toString()}/>}
-          {mode !== "credit" && (
-  <div style={{marginBottom:14}}>
-    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
-      <label style={{color:"#8891aa",fontSize:11,fontWeight:600,textTransform:"uppercase"}}>Client</label>
-      <button onClick={()=>setSaveClientOpt(!saveClient_opt)} style={{background:saveClient_opt?"rgba(0,217,126,0.15)":"#252b3b",border:`1px solid ${saveClient_opt?"rgba(0,217,126,0.3)":"transparent"}`,borderRadius:8,padding:"4px 10px",color:saveClient_opt?"#00d97e":"#8891aa",fontSize:11,fontWeight:700,cursor:"pointer",fontFamily:"'Sora',sans-serif"}}>
-        {saveClient_opt?"✓ Client enregistré":"+ Enregistrer client"}
+          <div style={{marginBottom:14}}>
+  <label style={{display:"block",color:"#8891aa",fontSize:11,fontWeight:600,marginBottom:8,textTransform:"uppercase"}}>Client</label>
+  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:10}}>
+    {["anonyme","existant","nouveau"].map(m=>(
+      <button key={m} onClick={()=>setModeClient(m)} style={{background:modeClient===m?"rgba(0,217,126,0.15)":"#252b3b",border:modeClient===m?"1.5px solid #00d97e":"1.5px solid transparent",borderRadius:10,padding:"8px 4px",cursor:"pointer",color:modeClient===m?"#00d97e":"#8891aa",fontWeight:700,fontSize:10,fontFamily:"'Sora',sans-serif"}}>
+        {m==="anonyme"?"👤 Anonyme":m==="existant"?"📋 Existant":"➕ Nouveau"}
       </button>
-    </div>
-    {saveClient_opt&&(
-      <div style={{background:"#252b3b",borderRadius:12,padding:14,display:"flex",flexDirection:"column",gap:10}}>
-        <input placeholder="Nom du client *" value={quickClient.nom} onChange={e=>setQuickClient({...quickClient,nom:e.target.value})} style={{...IS}}/>
-        <input placeholder="Téléphone" type="tel" value={quickClient.telephone} onChange={e=>setQuickClient({...quickClient,telephone:e.target.value})} style={{...IS}}/>
-        <div style={{color:"#8891aa",fontSize:11}}>💡 Ce client sera sauvegardé dans votre base de données</div>
-      </div>
-    )}
+    ))}
   </div>
-)}
-          {(mode==="credit"||(mode==="cash"&&mpay&&+mpay<tot))&&(
-            <div style={{marginBottom:14}}>
-              <label style={{display:"block",color:"#8891aa",fontSize:11,fontWeight:600,marginBottom:8,textTransform:"uppercase"}}>{t.client}</label>
-              <select value={cid} onChange={e=>setCid(e.target.value)} style={{...IS,marginBottom:8}}>
-                <option value="">{t.clientExistant}</option>
-                {clients.map(c=><option key={c.id} value={c.id}>{c.nom} {c.dette>0?`(${fmt(c.dette)})`:""}</option>)}
-                <option value="nouveau">{t.nouveauClient}</option>
-              </select>
-              {cid==="nouveau"&&(
-                <div style={{display:"flex",flexDirection:"column",gap:8}}>
-                  <input placeholder={t.nomComplet} style={IS} onChange={e=>setNc({...nc,nom:e.target.value})}/>
-                  <input placeholder={t.telephone} style={IS} onChange={e=>setNc({...nc,telephone:e.target.value})}/>
-                  <input placeholder={t.quartier} style={IS} onChange={e=>setNc({...nc,quartier:e.target.value})}/>
-                </div>
-              )}
-            </div>
-          )}
+  {modeClient==="existant"&&(
+    <select value={selectedClientId} onChange={e=>setSelectedClientId(e.target.value)} style={{...IS}}>
+      <option value="">-- Sélectionner un client --</option>
+      {clients.map(c=><option key={c.id} value={c.id}>{c.nom} {c.telephone?`| ${c.telephone}`:""} {c.dette>0?`| Dette: ${fmt(c.dette)}`:""}</option>)}
+    </select>
+  )}
+  {modeClient==="nouveau"&&(
+    <div style={{background:"#252b3b",borderRadius:12,padding:14,display:"flex",flexDirection:"column",gap:10}}>
+      <input placeholder="Nom du client *" value={newClientData.nom} onChange={e=>setNewClientData({...newClientData,nom:e.target.value})} style={{...IS}}/>
+      <input placeholder="Téléphone" type="tel" value={newClientData.telephone} onChange={e=>setNewClientData({...newClientData,telephone:e.target.value})} style={{...IS}}/>
+      <div style={{color:"#00d97e",fontSize:11}}>✅ Client sauvegardé dans votre base de données</div>
+    </div>
+  )}
+</div>
           {mon>0&&<div style={{background:"rgba(255,217,61,0.1)",border:"1px solid rgba(255,217,61,0.3)",borderRadius:10,padding:10,marginBottom:10,textAlign:"center"}}><span style={{color:"#8891aa",fontSize:12}}>{t.monnaie}: </span><span style={{color:"#ffd93d",fontWeight:800,fontSize:16}}>{fmt(mon)}</span></div>}
           {det>0&&<div style={{background:"rgba(255,107,107,0.1)",border:"1px solid rgba(255,107,107,0.3)",borderRadius:10,padding:10,marginBottom:10,textAlign:"center"}}><span style={{color:"#8891aa",fontSize:12}}>{t.detteCreee}: </span><span style={{color:"#ff6b6b",fontWeight:800,fontSize:16}}>{fmt(det)}</span></div>}
           <div style={{display:"flex",gap:10}}>
@@ -1574,6 +1580,35 @@ const RapportsPage = ({ ventes, produits, t, setShowFacture, lim }) => {
             </div>
           ))}
       </div>
+      {/* TOP CLIENTS */}
+<div style={{background:"#1a1f2e",borderRadius:14,padding:14,marginTop:14}}>
+  <div style={{color:"#f0f4ff",fontWeight:700,fontSize:14,marginBottom:12}}>🏆 Meilleurs clients</div>
+  {(() => {
+    const cm = {};
+    vf.forEach(v => {
+      if (v.clientNom) {
+        if (!cm[v.clientId]) cm[v.clientId] = { nom:v.clientNom, tel:v.clientTel||"", total:0, nb:0 };
+        cm[v.clientId].total += v.montant||0;
+        cm[v.clientId].nb += 1;
+      }
+    });
+    const top = Object.values(cm).sort((a,b)=>b.total-a.total).slice(0,5);
+    if (top.length===0) return <div style={{color:"#8891aa",fontSize:12,textAlign:"center",padding:16}}>Aucun client enregistré</div>;
+    return top.map((c,i)=>(
+      <div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 0",borderBottom:"1px solid rgba(255,255,255,0.05)"}}>
+        <div style={{display:"flex",alignItems:"center",gap:10}}>
+          <div style={{width:28,height:28,borderRadius:"50%",background:`${["#ffd93d","#8891aa","#ff9f43","#7b8cff","#00d97e"][i]}22`,display:"flex",alignItems:"center",justifyContent:"center",color:["#ffd93d","#8891aa","#ff9f43","#7b8cff","#00d97e"][i],fontWeight:800,fontSize:12}}>#{i+1}</div>
+          <div>
+            <div style={{color:"#f0f4ff",fontSize:13,fontWeight:600}}>{c.nom}</div>
+            {c.tel&&<div style={{color:"#8891aa",fontSize:10}}>📞 {c.tel}</div>}
+            <div style={{color:"#8891aa",fontSize:10}}>{c.nb} achat(s)</div>
+          </div>
+        </div>
+        <div style={{color:"#00d97e",fontWeight:800,fontSize:13}}>{fmt(c.total)}</div>
+      </div>
+    ));
+  })()}
+</div>
     </div>
   );
 };
