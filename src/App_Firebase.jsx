@@ -1205,6 +1205,8 @@ const VentesPage = ({ produits, ventes, clients, saveVente, saveClient, t, isPro
   const [mpay,setMpay] = useState("");
   const [cid,setCid] = useState("");
   const [nc,setNc] = useState({nom:"",telephone:"",quartier:""});
+  const [saveClient_opt,setSaveClientOpt] = useState(false);
+  const [quickClient,setQuickClient] = useState({nom:"",telephone:""});
   const [ok,setOk] = useState(false);
   const [last,setLast] = useState(null);
 
@@ -1216,12 +1218,18 @@ const VentesPage = ({ produits, ventes, clients, saveVente, saveClient, t, isPro
   const det = tot - pay;
   const mon = mpay&&mode==="cash"?Math.max(0,+mpay-tot):0;
 
-  const reset = () => { setOk(false);setPan([]);setStep(1);setSearch("");setMode("cash");setMpay("");setCid("");setNc({nom:"",telephone:"",quartier:""});setLast(null); };
+  const reset = () => { setOk(false);setPan([]);setStep(1);setSearch("");setMode("cash");setMpay("");setCid("");setNc({nom:"",telephone:"",quartier:""});setLast(null);setSaveClientOpt(false);setQuickClient({nom:"",telephone:""}); };
 
   const conf = async () => {
     if (pan.length===0) return;
     let cr = cid;
     if (cid==="nouveau"&&nc.nom) { cr = await saveClient({...nc,dette:det}); }
+    if (saveClient_opt && quickClient.nom && mode !== "credit") {
+  const existSnap = await getDocs(query(collection(db,"clients"), where("telephone","==",quickClient.telephone), where("boutiqueId","==",bid)));
+  if (existSnap.empty) {
+    await saveClient({...quickClient,quartier:"",dette:0});
+  }
+}
     else if (cid&&det>0) { const c=clients.find(x=>x.id===cid); if(c) await saveClient({...c,dette:(c.dette||0)+det}); }
     const vd = { produit:pan.map(x=>x.nom).join(", "), quantite:pan.reduce((s,x)=>s+x.qte,0), montant:tot, paye:pay, mode, clientId:cr||null, items:pan.map(x=>({id:x.id,nom:x.nom,qte:x.qte,prixVente:x.prixVente})) };
     const v = await saveVente(vd);
@@ -1306,6 +1314,23 @@ const VentesPage = ({ produits, ventes, clients, saveVente, saveClient, t, isPro
             </div>
           </div>
           {mode==="cash"&&<Field label={t.montantRecu} type="number" value={mpay} onChange={setMpay} placeholder={tot.toString()}/>}
+          {mode !== "credit" && (
+  <div style={{marginBottom:14}}>
+    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
+      <label style={{color:"#8891aa",fontSize:11,fontWeight:600,textTransform:"uppercase"}}>Client</label>
+      <button onClick={()=>setSaveClientOpt(!saveClient_opt)} style={{background:saveClient_opt?"rgba(0,217,126,0.15)":"#252b3b",border:`1px solid ${saveClient_opt?"rgba(0,217,126,0.3)":"transparent"}`,borderRadius:8,padding:"4px 10px",color:saveClient_opt?"#00d97e":"#8891aa",fontSize:11,fontWeight:700,cursor:"pointer",fontFamily:"'Sora',sans-serif"}}>
+        {saveClient_opt?"✓ Client enregistré":"+ Enregistrer client"}
+      </button>
+    </div>
+    {saveClient_opt&&(
+      <div style={{background:"#252b3b",borderRadius:12,padding:14,display:"flex",flexDirection:"column",gap:10}}>
+        <input placeholder="Nom du client *" value={quickClient.nom} onChange={e=>setQuickClient({...quickClient,nom:e.target.value})} style={{...IS}}/>
+        <input placeholder="Téléphone" type="tel" value={quickClient.telephone} onChange={e=>setQuickClient({...quickClient,telephone:e.target.value})} style={{...IS}}/>
+        <div style={{color:"#8891aa",fontSize:11}}>💡 Ce client sera sauvegardé dans votre base de données</div>
+      </div>
+    )}
+  </div>
+)}
           {(mode==="credit"||(mode==="cash"&&mpay&&+mpay<tot))&&(
             <div style={{marginBottom:14}}>
               <label style={{display:"block",color:"#8891aa",fontSize:11,fontWeight:600,marginBottom:8,textTransform:"uppercase"}}>{t.client}</label>
