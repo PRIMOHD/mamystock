@@ -1227,7 +1227,7 @@ const VentesPage = ({ produits, ventes, clients, saveVente, saveClient, t, isPro
 
   const reset = () => { setOk(false);setPan([]);setStep(1);setSearch("");setMode("cash");setMpay("");setCid("");setNc({nom:"",telephone:"",quartier:""});setLast(null);setModeClient("anonyme");setSelectedClientId("");setNewClientData({nom:"",telephone:""}); };
 
-  const conf = async () => {
+const conf = async () => {
   if (pan.length === 0) return;
   if (lim.ventes !== Infinity) {
     const dm = new Date(); dm.setDate(1); dm.setHours(0,0,0,0);
