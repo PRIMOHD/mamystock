@@ -1228,42 +1228,52 @@ const VentesPage = ({ produits, ventes, clients, saveVente, saveClient, t, isPro
   const reset = () => { setOk(false);setPan([]);setStep(1);setSearch("");setMode("cash");setMpay("");setCid("");setNc({nom:"",telephone:"",quartier:""});setLast(null);setModeClient("anonyme");setSelectedClientId("");setNewClientData({nom:"",telephone:""}); };
 
   const conf = async () => {
-    if (pan.length===0) return;
-  let cr = null;
-let clientNom = "";
-let clientTel = "";
-
-if (modeClient==="existant" && selectedClientId) {
-  cr = selectedClientId;
-  const c = clients.find(x=>x.id===selectedClientId);
-  if (c) { clientNom=c.nom; clientTel=c.telephone||""; }
-  if (det>0 && c) await saveClient({...c,dette:(c.dette||0)+det});
-} else if (modeClient==="nouveau" && newClientData.nom) {
-  const newId = await saveClient({...newClientData,quartier:"",dette:det});
-  cr = newId;
-  clientNom = newClientData.nom;
-  clientTel = newClientData.telephone||"";
-} else if (mode==="credit") {
-  if (selectedClientId) {
-    cr = selectedClientId;
-    const c = clients.find(x=>x.id===selectedClientId);
-    if (c) { clientNom=c.nom; clientTel=c.telephone||""; if(det>0) await saveClient({...c,dette:(c.dette||0)+det}); }
-  } else if (cid) {
-    cr = cid;
-    const c = clients.find(x=>x.id===cid);
-    if (c) { clientNom=c.nom; clientTel=c.telephone||""; if(det>0) await saveClient({...c,dette:(c.dette||0)+det}); }
+  if (pan.length === 0) return;
+  if (lim.ventes !== Infinity) {
+    const dm = new Date(); dm.setDate(1); dm.setHours(0,0,0,0);
+    const vm = ventes.filter(v=>getDate(v)>=dm).length;
+    if (vm >= lim.ventes) {
+      alert(`⚠️ Maximum ${lim.ventes} ventes/mois avec le plan Essai.`);
+      return;
+    }
   }
-}
-{vente.clientNom&&(
-  <div style={{background:"rgba(255,159,67,0.1)",border:"1px solid rgba(255,159,67,0.3)",borderRadius:8,padding:"8px 12px",marginBottom:10}}>
-    <span style={{color:"#ff9f43",fontSize:12}}>👤 Client: </span>
-    <strong style={{color:"#f0f4ff",fontSize:12}}>{vente.clientNom}</strong>
-    {vente.clientTel&&<span style={{color:"#8891aa",fontSize:11}}> | {vente.clientTel}</span>}
-  </div>
-)}
-    const v = await saveVente(vd);
-    if (v) { setLast(v); setOk(true); }
+  let cr = null;
+  let clientNom = "";
+  let clientTel = "";
+  if (modeClient === "existant" && selectedClientId) {
+    cr = selectedClientId;
+    const c = clients.find(x => x.id === selectedClientId);
+    if (c) {
+      clientNom = c.nom;
+      clientTel = c.telephone || "";
+      if (det > 0) await saveClient({...c, dette:(c.dette||0)+det});
+    }
+  } else if (modeClient === "nouveau" && newClientData.nom) {
+    const newId = await saveClient({...newClientData, quartier:"", dette:det});
+    cr = newId;
+    clientNom = newClientData.nom;
+    clientTel = newClientData.telephone || "";
+  } else if (mode === "credit" && cid) {
+    cr = cid;
+    const c = clients.find(x => x.id === cid);
+    if (c) {
+      clientNom = c.nom;
+      clientTel = c.telephone || "";
+      if (det > 0) await saveClient({...c, dette:(c.dette||0)+det});
+    }
+  }
+  const vd = {
+    produit: pan.map(x=>x.nom).join(", "),
+    quantite: pan.reduce((s,x)=>s+x.qte, 0),
+    montant: tot, paye: pay, mode,
+    clientId: cr || null,
+    clientNom: clientNom || "",
+    clientTel: clientTel || "",
+    items: pan.map(x=>({id:x.id, nom:x.nom, qte:x.qte, prixVente:x.prixVente}))
   };
+  const v = await saveVente(vd);
+  if (v) { setLast(v); setOk(true); }
+};
 
   if (ok) return (
     <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",minHeight:380,gap:13}}>
