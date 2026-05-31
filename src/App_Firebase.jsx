@@ -958,12 +958,12 @@ useEffect(() => {
       </div>
     </div>
     <div style={{flex:1,padding:"16px 12px",display:"flex",flexDirection:"column",gap:4}}>
-      {pages.map(p=>(
-        <button key={p.id} onClick={()=>setPage(p.id)} style={{display:"flex",alignItems:"center",gap:12,padding:"10px 12px",borderRadius:10,border:"none",background:page===p.id?"rgba(0,217,126,0.1)":"transparent",cursor:"pointer",width:"100%",textAlign:"left"}}>
-          <Icon name={p.icon} size={18} color={page===p.id?"#00d97e":"#555e7a"}/>
-          <span style={{color:page===p.id?"#00d97e":"#8891aa",fontWeight:600,fontSize:13,fontFamily:"'Sora',sans-serif"}}>{p.label}</span>
-        </button>
-      ))}
+      {isProp && (
+  <button onClick={()=>setShowVendeurs(true)} style={{display:"flex",alignItems:"center",gap:12,padding:"12px 14px",borderRadius:10,border:"none",background:"transparent",cursor:"pointer",width:"100%",textAlign:"left"}}>
+    <Icon name="user" size={18} color="#7b8cff"/>
+    <span style={{color:"#8891aa",fontWeight:600,fontSize:13,fontFamily:"'Sora',sans-serif"}}>{t.vendeurs}</span>
+  </button>
+)}
     </div>
     <div style={{padding:"16px 12px",borderTop:"1px solid rgba(255,255,255,0.06)",display:"flex",flexDirection:"column",gap:8}}>
       <div style={{background:isOnline?"rgba(0,217,126,0.1)":"rgba(255,71,87,0.1)",border:`1px solid ${isOnline?"#00d97e":"#ff4757"}33`,borderRadius:8,padding:"6px 10px",fontSize:11,color:isOnline?"#00d97e":"#ff4757",fontWeight:600,textAlign:"center"}}>
@@ -1580,35 +1580,7 @@ const RapportsPage = ({ ventes, produits, t, setShowFacture, lim }) => {
             </div>
           ))}
       </div>
-      {/* TOP CLIENTS */}
-<div style={{background:"#1a1f2e",borderRadius:14,padding:14,marginTop:14}}>
-  <div style={{color:"#f0f4ff",fontWeight:700,fontSize:14,marginBottom:12}}>🏆 Meilleurs clients</div>
-  {(() => {
-    const cm = {};
-    vf.forEach(v => {
-      if (v.clientNom) {
-        if (!cm[v.clientId]) cm[v.clientId] = { nom:v.clientNom, tel:v.clientTel||"", total:0, nb:0 };
-        cm[v.clientId].total += v.montant||0;
-        cm[v.clientId].nb += 1;
-      }
-    });
-    const top = Object.values(cm).sort((a,b)=>b.total-a.total).slice(0,5);
-    if (top.length===0) return <div style={{color:"#8891aa",fontSize:12,textAlign:"center",padding:16}}>Aucun client enregistré</div>;
-    return top.map((c,i)=>(
-      <div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 0",borderBottom:"1px solid rgba(255,255,255,0.05)"}}>
-        <div style={{display:"flex",alignItems:"center",gap:10}}>
-          <div style={{width:28,height:28,borderRadius:"50%",background:`${["#ffd93d","#8891aa","#ff9f43","#7b8cff","#00d97e"][i]}22`,display:"flex",alignItems:"center",justifyContent:"center",color:["#ffd93d","#8891aa","#ff9f43","#7b8cff","#00d97e"][i],fontWeight:800,fontSize:12}}>#{i+1}</div>
-          <div>
-            <div style={{color:"#f0f4ff",fontSize:13,fontWeight:600}}>{c.nom}</div>
-            {c.tel&&<div style={{color:"#8891aa",fontSize:10}}>📞 {c.tel}</div>}
-            <div style={{color:"#8891aa",fontSize:10}}>{c.nb} achat(s)</div>
-          </div>
-        </div>
-        <div style={{color:"#00d97e",fontWeight:800,fontSize:13}}>{fmt(c.total)}</div>
-      </div>
-    ));
-  })()}
-</div>
+      
     </div>
   );
 };
