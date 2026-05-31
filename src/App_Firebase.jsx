@@ -1605,20 +1605,20 @@ const RapportsPage = ({ ventes, produits, t, setShowFacture, lim }) => {
       
     </div>
   );
-  {/* TOP CLIENTS */}
 <div style={{background:"#1a1f2e",borderRadius:14,padding:14,marginTop:14}}>
   <div style={{color:"#f0f4ff",fontWeight:700,fontSize:14,marginBottom:12}}>🏆 Meilleurs clients</div>
-  {(() => {
-    const cm = {};
-    vf.forEach(v => {
-      if (v.clientNom) {
-        if (!cm[v.clientId]) cm[v.clientId] = { nom:v.clientNom, tel:v.clientTel||"", total:0, nb:0 };
-        cm[v.clientId].total += v.montant||0;
-        cm[v.clientId].nb += 1;
+  {(()=>{
+    const cm={};
+    vf.forEach(v=>{
+      const key=v.clientId||v.clientNom;
+      if(key){
+        if(!cm[key]) cm[key]={nom:v.clientNom||"Client",tel:v.clientTel||"",total:0,nb:0};
+        cm[key].total+=v.montant||0;
+        cm[key].nb+=1;
       }
     });
-    const top = Object.values(cm).sort((a,b)=>b.total-a.total).slice(0,5);
-    if (top.length===0) return <div style={{color:"#8891aa",fontSize:12,textAlign:"center",padding:16}}>Aucun client enregistré</div>;
+    const top=Object.values(cm).sort((a,b)=>b.total-a.total).slice(0,5);
+    if(top.length===0) return <div style={{color:"#8891aa",fontSize:12,textAlign:"center",padding:16}}>Aucun client enregistré</div>;
     return top.map((c,i)=>(
       <div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 0",borderBottom:"1px solid rgba(255,255,255,0.05)"}}>
         <div style={{display:"flex",alignItems:"center",gap:10}}>
