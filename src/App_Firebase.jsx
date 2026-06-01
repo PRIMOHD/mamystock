@@ -419,7 +419,7 @@ const Login = ({onLogin,t}) => {
 
   return (
     <div style={{minHeight:"100vh",background:"#111520",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:24,fontFamily:"'Sora',sans-serif"}}>
-      <div style={{width:72,height:72,borderRadius:20,background:"linear-gradient(135deg,#00d97e,#00b360)",display:"flex",alignItems:"center",justifyContent:"center",fontWeight:800,color:"#fff",fontSize:30,marginBottom:20}}>L</div>
+      <img src="/logo.png" style={{width:72,height:72,borderRadius:20,marginBottom:20,objectFit:"contain"}} alt="Lapia"/>
       <div style={{color:"#f0f4ff",fontWeight:800,fontSize:28,marginBottom:6}}>Lapia</div>
       <div style={{color:"#8891aa",fontSize:16,marginBottom:36}}>{t.connectezVous}</div>
       <div style={{width:"100%",maxWidth:380}}>
