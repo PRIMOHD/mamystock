@@ -1,4 +1,4 @@
-const CACHE = "lapia-v1";
+const CACHE = "lapia-v2";
 const ASSETS = ["/", "/index.html"];
 
 self.addEventListener("install", e => {
