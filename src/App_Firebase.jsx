@@ -449,7 +449,96 @@ const Login = ({onLogin,t}) => {
 // ── ADMIN DASHBOARD PC ──
 // À coller dans App_Firebase.jsx, remplacer le composant AdminDashboard existant
 
+// ── ADMIN DASHBOARD PC v2 — 3 langues FR/EN/AR ──
+// Remplace AdminDashboardPC dans App_Firebase.jsx
+
 const AdminDashboardPC = ({user, onLogout, t, langue, setLangue}) => {
+
+  // Traductions Admin
+  const TA = {
+    fr: {
+      titre:"Lapia Admin", superAdmin:"👑 SUPER ADMIN",
+      boutique:"Boutique", periode:"Période",
+      mensuel:"📅 Mensuel", trimestriel:"📊 Trimestriel", annuel:"📈 Annuel",
+      annee:"Année", mois_label:"Mois", trimestre_label:"Trimestre",
+      deconnexion:"Déconnexion", imprimer:"🖨️ Imprimer le bilan",
+      bilan:"Bilan", select_boutique:"← Sélectionne une boutique dans le menu",
+      ca:"Chiffre d'affaires", encaisse:"Encaissé", dettes:"Dettes en cours",
+      nb_ventes:"Nombre de ventes", modes:"💳 Modes de paiement",
+      cash:"💵 Cash", mobile:"📱 Mobile Money", cheque:"🏦 Chèque", credit:"📋 Crédit",
+      du_ca:"du CA", evolution:"📈 Évolution",
+      mensuelle:"mensuelle", trimestrielle:"trimestrielle",
+      top_produits:"🏆 Top Produits", top_clients:"👥 Meilleurs Clients",
+      perf_vendeurs:"🧑‍💼 Performance Vendeurs",
+      vendeur:"Vendeur", nb_ventes_col:"Nb Ventes", part_ca:"Part du CA",
+      dernieres_ventes:"📋 Dernières ventes de la période",
+      aucune_vente:"Aucune vente sur cette période",
+      aucun_client:"Aucun client enregistré",
+      facture:"Facture", date:"Date", produit:"Produit",
+      client:"Client", montant:"Montant", paye:"Payé", mode:"Mode",
+      unites:"unités", achats:"achat(s)",
+      mois: ["Janvier","Février","Mars","Avril","Mai","Juin","Juillet","Août","Septembre","Octobre","Novembre","Décembre"],
+      trimestres: ["T1 (Jan-Mar)","T2 (Avr-Jun)","T3 (Jul-Sep)","T4 (Oct-Déc)"],
+      genere_le:"Généré le", periode_label:"Période",
+      resume:"💰 Résumé Financier",
+    },
+    en: {
+      titre:"Lapia Admin", superAdmin:"👑 SUPER ADMIN",
+      boutique:"Store", periode:"Period",
+      mensuel:"📅 Monthly", trimestriel:"📊 Quarterly", annuel:"📈 Annual",
+      annee:"Year", mois_label:"Month", trimestre_label:"Quarter",
+      deconnexion:"Log out", imprimer:"🖨️ Print report",
+      bilan:"Report", select_boutique:"← Select a store from the menu",
+      ca:"Revenue", encaisse:"Collected", dettes:"Outstanding debts",
+      nb_ventes:"Number of sales", modes:"💳 Payment methods",
+      cash:"💵 Cash", mobile:"📱 Mobile Money", cheque:"🏦 Cheque", credit:"📋 Credit",
+      du_ca:"of revenue", evolution:"📈 Evolution",
+      mensuelle:"monthly", trimestrielle:"quarterly",
+      top_produits:"🏆 Top Products", top_clients:"👥 Best Customers",
+      perf_vendeurs:"🧑‍💼 Seller Performance",
+      vendeur:"Seller", nb_ventes_col:"Sales", part_ca:"Revenue share",
+      dernieres_ventes:"📋 Latest sales of the period",
+      aucune_vente:"No sales in this period",
+      aucun_client:"No registered customers",
+      facture:"Invoice", date:"Date", produit:"Product",
+      client:"Customer", montant:"Amount", paye:"Paid", mode:"Method",
+      unites:"units", achats:"purchase(s)",
+      mois: ["January","February","March","April","May","June","July","August","September","October","November","December"],
+      trimestres: ["Q1 (Jan-Mar)","Q2 (Apr-Jun)","Q3 (Jul-Sep)","Q4 (Oct-Dec)"],
+      genere_le:"Generated on", periode_label:"Period",
+      resume:"💰 Financial Summary",
+    },
+    ar: {
+      titre:"Lapia Admin", superAdmin:"👑 مدير عام",
+      boutique:"المتجر", periode:"الفترة",
+      mensuel:"📅 شهري", trimestriel:"📊 فصلي", annuel:"📈 سنوي",
+      annee:"السنة", mois_label:"الشهر", trimestre_label:"الفصل",
+      deconnexion:"تسجيل الخروج", imprimer:"🖨️ طباعة التقرير",
+      bilan:"تقرير", select_boutique:"← اختر متجراً من القائمة",
+      ca:"رقم الأعمال", encaisse:"المحصل", dettes:"الديون الجارية",
+      nb_ventes:"عدد المبيعات", modes:"💳 طرق الدفع",
+      cash:"💵 نقداً", mobile:"📱 موبايل موني", cheque:"🏦 شيك", credit:"📋 دين",
+      du_ca:"من رقم الأعمال", evolution:"📈 التطور",
+      mensuelle:"الشهري", trimestrielle:"الفصلي",
+      top_produits:"🏆 أفضل المنتجات", top_clients:"👥 أفضل العملاء",
+      perf_vendeurs:"🧑‍💼 أداء البائعين",
+      vendeur:"البائع", nb_ventes_col:"المبيعات", part_ca:"حصة رقم الأعمال",
+      dernieres_ventes:"📋 آخر مبيعات الفترة",
+      aucune_vente:"لا توجد مبيعات في هذه الفترة",
+      aucun_client:"لا يوجد عملاء مسجلون",
+      facture:"فاتورة", date:"التاريخ", produit:"المنتج",
+      client:"العميل", montant:"المبلغ", paye:"المدفوع", mode:"الطريقة",
+      unites:"وحدات", achats:"شراء",
+      mois: ["يناير","فبراير","مارس","أبريل","مايو","يونيو","يوليو","أغسطس","سبتمبر","أكتوبر","نوفمبر","ديسمبر"],
+      trimestres: ["ف1 (يناير-مارس)","ف2 (أبريل-يونيو)","ف3 (يوليو-سبتمبر)","ف4 (أكتوبر-ديسمبر)"],
+      genere_le:"تم الإنشاء في", periode_label:"الفترة",
+      resume:"💰 ملخص مالي",
+    }
+  };
+
+  const ta = TA[langue] || TA.fr;
+  const isRTL = langue === "ar";
+
   const [boutiques, setBoutiques] = useState([]);
   const [ventes, setVentes] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -476,26 +565,17 @@ const AdminDashboardPC = ({user, onLogout, t, langue, setLangue}) => {
     })();
   }, []);
 
-  const mois = ["Janvier","Février","Mars","Avril","Mai","Juin","Juillet","Août","Septembre","Octobre","Novembre","Décembre"];
-  const trimestres = ["T1 (Jan-Mar)","T2 (Avr-Jun)","T3 (Jul-Sep)","T4 (Oct-Déc)"];
-
   const getVentesBoutique = () => selectedBoutique ? ventes.filter(v => v.boutiqueId === selectedBoutique.id) : [];
 
   const getVentesPeriode = () => {
     const vb = getVentesBoutique();
     if (periodType === "mensuel") {
-      return vb.filter(v => {
-        const d = getDate(v);
-        return d.getMonth() === selectedMonth && d.getFullYear() === selectedYear;
-      });
+      return vb.filter(v => { const d=getDate(v); return d.getMonth()===selectedMonth && d.getFullYear()===selectedYear; });
     } else if (periodType === "trimestriel") {
       const debut = selectedQuarter * 3;
-      return vb.filter(v => {
-        const d = getDate(v);
-        return d.getMonth() >= debut && d.getMonth() < debut+3 && d.getFullYear() === selectedYear;
-      });
+      return vb.filter(v => { const d=getDate(v); return d.getMonth()>=debut && d.getMonth()<debut+3 && d.getFullYear()===selectedYear; });
     } else {
-      return vb.filter(v => getDate(v).getFullYear() === selectedYear);
+      return vb.filter(v => getDate(v).getFullYear()===selectedYear);
     }
   };
 
@@ -510,40 +590,20 @@ const AdminDashboardPC = ({user, onLogout, t, langue, setLangue}) => {
     credit: vs.filter(v=>v.mode==="credit").reduce((s,v)=>s+(v.montant||0),0),
   });
 
-  // Données pour graphique mensuel (12 mois)
   const getDataMensuelle = () => {
     const vb = getVentesBoutique();
-    return mois.map((m, i) => {
-      const vm = vb.filter(v => {
-        const d = getDate(v);
-        return d.getMonth() === i && d.getFullYear() === selectedYear;
-      });
-      return {
-        mois: m.substring(0,3),
-        ca: vm.reduce((s,v)=>s+(v.montant||0),0),
-        encaisse: vm.reduce((s,v)=>s+(v.paye||0),0),
-        dettes: vm.reduce((s,v)=>s+((v.montant||0)-(v.paye||0)),0),
-        nb: vm.length,
-      };
+    return ta.mois.map((m, i) => {
+      const vm = vb.filter(v => { const d=getDate(v); return d.getMonth()===i && d.getFullYear()===selectedYear; });
+      return { mois:m.substring(0,3), ca:vm.reduce((s,v)=>s+(v.montant||0),0), encaisse:vm.reduce((s,v)=>s+(v.paye||0),0), nb:vm.length };
     });
   };
 
-  // Données pour graphique trimestriel
   const getDataTrimestrielle = () => {
     const vb = getVentesBoutique();
-    return trimestres.map((tr, i) => {
+    return [0,1,2,3].map(i => {
       const debut = i * 3;
-      const vm = vb.filter(v => {
-        const d = getDate(v);
-        return d.getMonth() >= debut && d.getMonth() < debut+3 && d.getFullYear() === selectedYear;
-      });
-      return {
-        trimestre: `T${i+1}`,
-        ca: vm.reduce((s,v)=>s+(v.montant||0),0),
-        encaisse: vm.reduce((s,v)=>s+(v.paye||0),0),
-        dettes: vm.reduce((s,v)=>s+((v.montant||0)-(v.paye||0)),0),
-        nb: vm.length,
-      };
+      const vm = vb.filter(v => { const d=getDate(v); return d.getMonth()>=debut && d.getMonth()<debut+3 && d.getFullYear()===selectedYear; });
+      return { trimestre:`T${i+1}`, ca:vm.reduce((s,v)=>s+(v.montant||0),0), encaisse:vm.reduce((s,v)=>s+(v.paye||0),0), nb:vm.length };
     });
   };
 
@@ -552,47 +612,28 @@ const AdminDashboardPC = ({user, onLogout, t, langue, setLangue}) => {
   const dataMensuelle = getDataMensuelle();
   const dataTrimestrielle = getDataTrimestrielle();
 
-  // Top produits
-  const pm = {};
-  vp.forEach(v => { pm[v.produit] = (pm[v.produit]||0) + (v.quantite||0); });
+  const pm = {}; vp.forEach(v=>{ pm[v.produit]=(pm[v.produit]||0)+(v.quantite||0); });
   const topProduits = Object.entries(pm).sort((a,b)=>b[1]-a[1]).slice(0,5);
 
-  // Top clients
-  const cm = {};
-  vp.forEach(v => {
-    if(v.clientNom) {
-      const k = v.clientId||v.clientNom;
-      if(!cm[k]) cm[k] = {nom:v.clientNom, tel:v.clientTel||"", total:0, nb:0};
-      cm[k].total += v.montant||0;
-      cm[k].nb += 1;
-    }
-  });
+  const cm = {}; vp.forEach(v=>{ if(v.clientNom){ const k=v.clientId||v.clientNom; if(!cm[k])cm[k]={nom:v.clientNom,tel:v.clientTel||"",total:0,nb:0}; cm[k].total+=v.montant||0; cm[k].nb+=1; } });
   const topClients = Object.values(cm).sort((a,b)=>b.total-a.total).slice(0,5);
 
-  // Performance vendeurs
-  const vm2 = {};
-  vp.forEach(v => {
-    if(v.vendeurId) {
-      if(!vm2[v.vendeurId]) vm2[v.vendeurId] = {nom:v.vendeurNom||"Vendeur", nb:0, ca:0};
-      vm2[v.vendeurId].nb += 1;
-      vm2[v.vendeurId].ca += v.montant||0;
-    }
-  });
+  const vm2 = {}; vp.forEach(v=>{ if(v.vendeurId){ if(!vm2[v.vendeurId])vm2[v.vendeurId]={nom:v.vendeurNom||"Vendeur",nb:0,ca:0}; vm2[v.vendeurId].nb+=1; vm2[v.vendeurId].ca+=v.montant||0; } });
   const vendeurs = Object.values(vm2).sort((a,b)=>b.ca-a.ca);
 
   const getPeriodeLabel = () => {
-    if(periodType==="mensuel") return `${mois[selectedMonth]} ${selectedYear}`;
-    if(periodType==="trimestriel") return `${trimestres[selectedQuarter]} ${selectedYear}`;
-    return `Année ${selectedYear}`;
+    if(periodType==="mensuel") return `${ta.mois[selectedMonth]} ${selectedYear}`;
+    if(periodType==="trimestriel") return `${ta.trimestres[selectedQuarter]} ${selectedYear}`;
+    return `${ta.annee} ${selectedYear}`;
   };
 
   const imprimer = () => {
     const w = window.open("","_blank");
     const boutNom = selectedBoutique?.nomBoutique || "Boutique";
     const periode = getPeriodeLabel();
-    w.document.write(`<!DOCTYPE html><html><head><title>Bilan ${boutNom} — ${periode}</title>
+    w.document.write(`<!DOCTYPE html><html dir="${isRTL?'rtl':'ltr'}"><head><title>${ta.bilan} ${boutNom} — ${periode}</title>
     <style>
-      body{font-family:Arial,sans-serif;padding:40px;color:#333;max-width:800px;margin:0 auto}
+      body{font-family:Arial,sans-serif;padding:40px;color:#333;max-width:800px;margin:0 auto;direction:${isRTL?'rtl':'ltr'}}
       h1{color:#00a85f;border-bottom:3px solid #00a85f;padding-bottom:10px}
       h2{color:#555;margin-top:30px;border-left:4px solid #00a85f;padding-left:10px}
       .grid{display:grid;grid-template-columns:repeat(4,1fr);gap:15px;margin:20px 0}
@@ -603,67 +644,47 @@ const AdminDashboardPC = ({user, onLogout, t, langue, setLangue}) => {
       th{background:#00a85f;color:white;padding:10px;text-align:left;font-size:13px}
       td{padding:10px;border-bottom:1px solid #eee;font-size:13px}
       tr:nth-child(even){background:#f9f9f9}
-      .mode-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:15px 0}
-      .mode-card{background:#f0f9f4;border:1px solid #b2dfdb;border-radius:6px;padding:12px;text-align:center}
       .footer{margin-top:40px;text-align:center;color:#999;font-size:12px;border-top:1px solid #eee;padding-top:20px}
     </style></head><body>
-    <h1>📊 Bilan Financier — ${boutNom}</h1>
-    <p style="color:#666">Période : <strong>${periode}</strong> | Généré le : <strong>${new Date().toLocaleDateString("fr-FR")}</strong></p>
-
-    <h2>💰 Résumé Financier</h2>
+    <h1>📊 ${ta.bilan} — ${boutNom}</h1>
+    <p style="color:#666">${ta.periode_label} : <strong>${periode}</strong> | ${ta.genere_le} : <strong>${new Date().toLocaleDateString("fr-FR")}</strong></p>
+    <h2>${ta.resume}</h2>
     <div class="grid">
-      <div class="card"><div class="card-label">Chiffre d'affaires</div><div class="card-val">${fmt(stats.ca)}</div></div>
-      <div class="card"><div class="card-label">Encaissé</div><div class="card-val" style="color:#00a85f">${fmt(stats.enc)}</div></div>
-      <div class="card"><div class="card-label">Dettes en cours</div><div class="card-val" style="color:#e53935">${fmt(stats.det)}</div></div>
-      <div class="card"><div class="card-label">Nombre de ventes</div><div class="card-val" style="color:#1565c0">${stats.nb}</div></div>
+      <div class="card"><div class="card-label">${ta.ca}</div><div class="card-val">${fmt(stats.ca)}</div></div>
+      <div class="card"><div class="card-label">${ta.encaisse}</div><div class="card-val" style="color:#00a85f">${fmt(stats.enc)}</div></div>
+      <div class="card"><div class="card-label">${ta.dettes}</div><div class="card-val" style="color:#e53935">${fmt(stats.det)}</div></div>
+      <div class="card"><div class="card-label">${ta.nb_ventes}</div><div class="card-val" style="color:#1565c0">${stats.nb}</div></div>
     </div>
-
-    <h2>💳 Modes de Paiement</h2>
-    <div class="mode-grid">
-      <div class="mode-card"><div style="font-size:12px;color:#666">💵 Cash</div><div style="font-weight:800;font-size:16px">${fmt(stats.cash)}</div></div>
-      <div class="mode-card"><div style="font-size:12px;color:#666">📱 Mobile Money</div><div style="font-weight:800;font-size:16px">${fmt(stats.mobile)}</div></div>
-      <div class="mode-card"><div style="font-size:12px;color:#666">🏦 Chèque</div><div style="font-weight:800;font-size:16px">${fmt(stats.cheque)}</div></div>
-      <div class="mode-card"><div style="font-size:12px;color:#e53935">📋 Crédit</div><div style="font-weight:800;font-size:16px;color:#e53935">${fmt(stats.credit)}</div></div>
+    <h2>${ta.modes}</h2>
+    <div class="grid">
+      <div class="card"><div class="card-label">${ta.cash}</div><div class="card-val">${fmt(stats.cash)}</div></div>
+      <div class="card"><div class="card-label">${ta.mobile}</div><div class="card-val">${fmt(stats.mobile)}</div></div>
+      <div class="card"><div class="card-label">${ta.cheque}</div><div class="card-val">${fmt(stats.cheque)}</div></div>
+      <div class="card"><div class="card-label">${ta.credit}</div><div class="card-val" style="color:#e53935">${fmt(stats.credit)}</div></div>
     </div>
-
-    ${topProduits.length>0?`
-    <h2>🏆 Top Produits</h2>
-    <table><tr><th>#</th><th>Produit</th><th>Quantité vendue</th></tr>
-    ${topProduits.map(([n,q],i)=>`<tr><td>${i+1}</td><td>${n}</td><td>${q} unités</td></tr>`).join("")}
-    </table>`:""}
-
-    ${topClients.length>0?`
-    <h2>👥 Meilleurs Clients</h2>
-    <table><tr><th>#</th><th>Client</th><th>Téléphone</th><th>Achats</th><th>Total</th></tr>
-    ${topClients.map((c,i)=>`<tr><td>${i+1}</td><td>${c.nom}</td><td>${c.tel||"-"}</td><td>${c.nb}</td><td>${fmt(c.total)}</td></tr>`).join("")}
-    </table>`:""}
-
-    ${vendeurs.length>0?`
-    <h2>🧑‍💼 Performance Vendeurs</h2>
-    <table><tr><th>Vendeur</th><th>Nb Ventes</th><th>Chiffre d'affaires</th></tr>
-    ${vendeurs.map(v=>`<tr><td>${v.nom}</td><td>${v.nb}</td><td>${fmt(v.ca)}</td></tr>`).join("")}
-    </table>`:""}
-
-    <div class="footer">Bilan généré par <strong>Lapia</strong> — Le cahier de boutique intelligent<br/>lapiagest.vercel.app</div>
+    ${topProduits.length>0?`<h2>${ta.top_produits}</h2><table><tr><th>#</th><th>${ta.produit}</th><th>${ta.unites}</th></tr>${topProduits.map(([n,q],i)=>`<tr><td>${i+1}</td><td>${n}</td><td>${q}</td></tr>`).join("")}</table>`:""}
+    ${topClients.length>0?`<h2>${ta.top_clients}</h2><table><tr><th>#</th><th>${ta.client}</th><th>📞</th><th>${ta.achats}</th><th>${ta.montant}</th></tr>${topClients.map((c,i)=>`<tr><td>${i+1}</td><td>${c.nom}</td><td>${c.tel||"-"}</td><td>${c.nb}</td><td>${fmt(c.total)}</td></tr>`).join("")}</table>`:""}
+    ${vendeurs.length>0?`<h2>${ta.perf_vendeurs}</h2><table><tr><th>${ta.vendeur}</th><th>${ta.nb_ventes_col}</th><th>${ta.ca}</th></tr>${vendeurs.map(v=>`<tr><td>${v.nom}</td><td>${v.nb}</td><td>${fmt(v.ca)}</td></tr>`).join("")}</table>`:""}
+    <div class="footer">Lapia — lapiagest.vercel.app</div>
     </body></html>`);
     w.document.close(); w.print();
   };
 
-  if(loading) return <div style={{minHeight:"100vh",background:"#111520",display:"flex",alignItems:"center",justifyContent:"center",color:"#f0f4ff",fontSize:18,fontFamily:"'Sora',sans-serif"}}>Chargement...</div>;
+  if(loading) return <div style={{minHeight:"100vh",background:"#111520",display:"flex",alignItems:"center",justifyContent:"center",color:"#f0f4ff",fontSize:18,fontFamily:"'Sora',sans-serif"}}>{t.chargement}</div>;
 
   const SIDEBAR_W = 260;
 
   return (
-    <div style={{minHeight:"100vh",background:"#111520",fontFamily:"'Sora',sans-serif",display:"flex"}}>
+    <div style={{minHeight:"100vh",background:"#111520",fontFamily:"'Sora',sans-serif",display:"flex",direction:isRTL?"rtl":"ltr"}}>
 
       {/* SIDEBAR */}
-      <div style={{width:SIDEBAR_W,background:"#1a1f2e",borderRight:"1px solid rgba(255,255,255,0.06)",display:"flex",flexDirection:"column",position:"fixed",left:0,top:0,bottom:0,padding:"20px 0",zIndex:100}}>
+      <div style={{width:SIDEBAR_W,background:"#1a1f2e",borderRight:isRTL?"none":"1px solid rgba(255,255,255,0.06)",borderLeft:isRTL?"1px solid rgba(255,255,255,0.06)":"none",display:"flex",flexDirection:"column",position:"fixed",[isRTL?"right":"left"]:0,top:0,bottom:0,padding:"20px 0",zIndex:100}}>
         <div style={{padding:"0 20px 24px",borderBottom:"1px solid rgba(255,255,255,0.06)"}}>
           <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:16}}>
             <div style={{width:42,height:42,borderRadius:12,background:"linear-gradient(135deg,#00d97e,#00b360)",display:"flex",alignItems:"center",justifyContent:"center",fontWeight:800,color:"#fff",fontSize:18}}>L</div>
             <div>
-              <div style={{color:"#f0f4ff",fontWeight:800,fontSize:17}}>Lapia Admin</div>
-              <div style={{color:"#00d97e",fontSize:11,fontWeight:700}}>👑 SUPER ADMIN</div>
+              <div style={{color:"#f0f4ff",fontWeight:800,fontSize:17}}>{ta.titre}</div>
+              <div style={{color:"#00d97e",fontSize:11,fontWeight:700}}>{ta.superAdmin}</div>
             </div>
           </div>
           <div style={{display:"flex",gap:4}}>
@@ -671,9 +692,8 @@ const AdminDashboardPC = ({user, onLogout, t, langue, setLangue}) => {
           </div>
         </div>
 
-        {/* SÉLECTION BOUTIQUE */}
         <div style={{padding:"16px 20px",borderBottom:"1px solid rgba(255,255,255,0.06)"}}>
-          <div style={{color:"#8891aa",fontSize:11,fontWeight:600,textTransform:"uppercase",marginBottom:10}}>Boutique</div>
+          <div style={{color:"#8891aa",fontSize:11,fontWeight:600,textTransform:"uppercase",marginBottom:10}}>{ta.boutique}</div>
           {boutiques.map(b=>(
             <button key={b.id} onClick={()=>setSelectedBoutique(b)}
               style={{display:"flex",alignItems:"center",gap:10,padding:"10px 12px",borderRadius:10,border:"none",background:selectedBoutique?.id===b.id?"rgba(0,217,126,0.1)":"transparent",cursor:"pointer",width:"100%",textAlign:"left",marginBottom:4}}>
@@ -686,74 +706,67 @@ const AdminDashboardPC = ({user, onLogout, t, langue, setLangue}) => {
           ))}
         </div>
 
-        {/* PÉRIODE */}
-        <div style={{padding:"16px 20px",flex:1}}>
-          <div style={{color:"#8891aa",fontSize:11,fontWeight:600,textTransform:"uppercase",marginBottom:10}}>Période</div>
-          {[{val:"mensuel",label:"📅 Mensuel"},{val:"trimestriel",label:"📊 Trimestriel"},{val:"annuel",label:"📈 Annuel"}].map(p=>(
+        <div style={{padding:"16px 20px",flex:1,overflowY:"auto"}}>
+          <div style={{color:"#8891aa",fontSize:11,fontWeight:600,textTransform:"uppercase",marginBottom:10}}>{ta.periode}</div>
+          {[{val:"mensuel",label:ta.mensuel},{val:"trimestriel",label:ta.trimestriel},{val:"annuel",label:ta.annuel}].map(p=>(
             <button key={p.val} onClick={()=>setPeriodType(p.val)}
               style={{display:"flex",alignItems:"center",gap:10,padding:"10px 12px",borderRadius:10,border:"none",background:periodType===p.val?"rgba(123,140,255,0.1)":"transparent",cursor:"pointer",width:"100%",textAlign:"left",marginBottom:4}}>
               <span style={{color:periodType===p.val?"#7b8cff":"#8891aa",fontWeight:600,fontSize:14,fontFamily:"'Sora',sans-serif"}}>{p.label}</span>
             </button>
           ))}
-
           <div style={{marginTop:16}}>
-            <div style={{color:"#8891aa",fontSize:11,fontWeight:600,textTransform:"uppercase",marginBottom:8}}>Année</div>
+            <div style={{color:"#8891aa",fontSize:11,fontWeight:600,textTransform:"uppercase",marginBottom:8}}>{ta.annee}</div>
             <select value={selectedYear} onChange={e=>setSelectedYear(+e.target.value)} style={{...IS,fontSize:14}}>
               {[2024,2025,2026,2027].map(y=><option key={y} value={y}>{y}</option>)}
             </select>
           </div>
-
           {periodType==="mensuel"&&<div style={{marginTop:12}}>
-            <div style={{color:"#8891aa",fontSize:11,fontWeight:600,textTransform:"uppercase",marginBottom:8}}>Mois</div>
+            <div style={{color:"#8891aa",fontSize:11,fontWeight:600,textTransform:"uppercase",marginBottom:8}}>{ta.mois_label}</div>
             <select value={selectedMonth} onChange={e=>setSelectedMonth(+e.target.value)} style={{...IS,fontSize:14}}>
-              {mois.map((m,i)=><option key={i} value={i}>{m}</option>)}
+              {ta.mois.map((m,i)=><option key={i} value={i}>{m}</option>)}
             </select>
           </div>}
-
           {periodType==="trimestriel"&&<div style={{marginTop:12}}>
-            <div style={{color:"#8891aa",fontSize:11,fontWeight:600,textTransform:"uppercase",marginBottom:8}}>Trimestre</div>
+            <div style={{color:"#8891aa",fontSize:11,fontWeight:600,textTransform:"uppercase",marginBottom:8}}>{ta.trimestre_label}</div>
             <select value={selectedQuarter} onChange={e=>setSelectedQuarter(+e.target.value)} style={{...IS,fontSize:14}}>
-              {trimestres.map((tr,i)=><option key={i} value={i}>{tr}</option>)}
+              {ta.trimestres.map((tr,i)=><option key={i} value={i}>{tr}</option>)}
             </select>
           </div>}
         </div>
 
         <div style={{padding:"16px 20px",borderTop:"1px solid rgba(255,255,255,0.06)"}}>
           <button onClick={onLogout} style={{display:"flex",alignItems:"center",justifyContent:"center",gap:8,background:"rgba(255,107,107,0.1)",border:"1px solid rgba(255,107,107,0.2)",borderRadius:8,padding:"10px",color:"#ff6b6b",fontSize:13,fontWeight:700,cursor:"pointer",fontFamily:"'Sora',sans-serif",width:"100%"}}>
-            <Icon name="logout" size={16} color="#ff6b6b"/> Déconnexion
+            <Icon name="logout" size={16} color="#ff6b6b"/> {ta.deconnexion}
           </button>
         </div>
       </div>
 
-      {/* CONTENU PRINCIPAL */}
-      <div style={{marginLeft:SIDEBAR_W,flex:1,padding:"30px",overflowY:"auto"}}>
+      {/* CONTENU */}
+      <div style={{marginLeft:isRTL?0:SIDEBAR_W,marginRight:isRTL?SIDEBAR_W:0,flex:1,padding:"30px",overflowY:"auto"}}>
 
-        {/* HEADER */}
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:30}}>
           <div>
-            <h1 style={{margin:0,color:"#f0f4ff",fontSize:26,fontWeight:800}}>{selectedBoutique?.nomBoutique||"Sélectionner une boutique"}</h1>
-            <div style={{color:"#8891aa",fontSize:15,marginTop:4}}>📊 Bilan {getPeriodeLabel()}</div>
-            {selectedBoutique&&<div style={{color:"#8891aa",fontSize:13,marginTop:2}}>📞 {selectedBoutique.telephone} {selectedBoutique.adresse?`| 📍 ${selectedBoutique.adresse}`:""}</div>}
+            <h1 style={{margin:0,color:"#f0f4ff",fontSize:26,fontWeight:800}}>{selectedBoutique?.nomBoutique||""}</h1>
+            <div style={{color:"#8891aa",fontSize:15,marginTop:4}}>📊 {ta.bilan} — {getPeriodeLabel()}</div>
+            {selectedBoutique&&<div style={{color:"#8891aa",fontSize:13,marginTop:2}}>📞 {selectedBoutique.telephone}{selectedBoutique.adresse?` | 📍 ${selectedBoutique.adresse}`:""}</div>}
           </div>
           <button onClick={imprimer}
             style={{background:"linear-gradient(135deg,#00d97e,#00b360)",border:"none",borderRadius:12,padding:"12px 24px",color:"#fff",fontSize:15,fontWeight:700,cursor:"pointer",fontFamily:"'Sora',sans-serif",display:"flex",alignItems:"center",gap:10,boxShadow:"0 4px 20px rgba(0,217,126,0.3)"}}>
-            🖨️ Imprimer le bilan
+            {ta.imprimer}
           </button>
         </div>
 
         {!selectedBoutique ? (
-          <div style={{textAlign:"center",padding:80,color:"#8891aa",fontSize:18}}>
-            ← Sélectionne une boutique dans le menu
-          </div>
+          <div style={{textAlign:"center",padding:80,color:"#8891aa",fontSize:18}}>{ta.select_boutique}</div>
         ) : (
           <>
-            {/* STATS PRINCIPALES */}
+            {/* STATS */}
             <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:16,marginBottom:24}}>
               {[
-                {label:"Chiffre d'affaires",value:fmt(stats.ca),color:"#f0f4ff",bg:"rgba(255,255,255,0.05)"},
-                {label:"Encaissé",value:fmt(stats.enc),color:"#00d97e",bg:"rgba(0,217,126,0.1)"},
-                {label:"Dettes en cours",value:fmt(stats.det),color:"#ff6b6b",bg:"rgba(255,107,107,0.1)"},
-                {label:"Nombre de ventes",value:stats.nb,color:"#7b8cff",bg:"rgba(123,140,255,0.1)"},
+                {label:ta.ca,value:fmt(stats.ca),color:"#f0f4ff",bg:"rgba(255,255,255,0.05)"},
+                {label:ta.encaisse,value:fmt(stats.enc),color:"#00d97e",bg:"rgba(0,217,126,0.1)"},
+                {label:ta.dettes,value:fmt(stats.det),color:"#ff6b6b",bg:"rgba(255,107,107,0.1)"},
+                {label:ta.nb_ventes,value:stats.nb,color:"#7b8cff",bg:"rgba(123,140,255,0.1)"},
               ].map(c=>(
                 <div key={c.label} style={{background:c.bg,border:`1px solid ${c.color}22`,borderRadius:16,padding:20}}>
                   <div style={{color:"#8891aa",fontSize:12,fontWeight:600,textTransform:"uppercase",marginBottom:8}}>{c.label}</div>
@@ -762,73 +775,71 @@ const AdminDashboardPC = ({user, onLogout, t, langue, setLangue}) => {
               ))}
             </div>
 
-            {/* MODES DE PAIEMENT */}
+            {/* MODES PAIEMENT */}
             <div style={{background:"#1a1f2e",borderRadius:16,padding:20,marginBottom:24}}>
-              <div style={{color:"#f0f4ff",fontWeight:700,fontSize:17,marginBottom:16}}>💳 Modes de paiement</div>
+              <div style={{color:"#f0f4ff",fontWeight:700,fontSize:17,marginBottom:16}}>{ta.modes}</div>
               <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12}}>
                 {[
-                  {label:"💵 Cash",value:stats.cash,color:"#00d97e"},
-                  {label:"📱 Mobile Money",value:stats.mobile,color:"#7b8cff"},
-                  {label:"🏦 Chèque",value:stats.cheque,color:"#ffd93d"},
-                  {label:"📋 Crédit",value:stats.credit,color:"#ff6b6b"},
+                  {label:ta.cash,value:stats.cash,color:"#00d97e"},
+                  {label:ta.mobile,value:stats.mobile,color:"#7b8cff"},
+                  {label:ta.cheque,value:stats.cheque,color:"#ffd93d"},
+                  {label:ta.credit,value:stats.credit,color:"#ff6b6b"},
                 ].map(m=>(
                   <div key={m.label} style={{background:"#252b3b",borderRadius:12,padding:16,textAlign:"center"}}>
                     <div style={{color:"#8891aa",fontSize:13,marginBottom:8}}>{m.label}</div>
                     <div style={{color:m.color,fontWeight:800,fontSize:18}}>{fmt(m.value)}</div>
-                    <div style={{color:"#8891aa",fontSize:11,marginTop:4}}>{stats.ca>0?Math.round((m.value/stats.ca)*100):0}% du CA</div>
+                    <div style={{color:"#8891aa",fontSize:11,marginTop:4}}>{stats.ca>0?Math.round((m.value/stats.ca)*100):0}% {ta.du_ca}</div>
                   </div>
                 ))}
               </div>
             </div>
 
-            {/* GRAPHIQUE ÉVOLUTION */}
+            {/* GRAPHIQUE */}
             <div style={{background:"#1a1f2e",borderRadius:16,padding:20,marginBottom:24}}>
               <div style={{color:"#f0f4ff",fontWeight:700,fontSize:17,marginBottom:16}}>
-                📈 Évolution {periodType==="annuel"?"mensuelle":periodType==="trimestriel"?"trimestrielle":"— Comparaison"} {selectedYear}
+                {ta.evolution} {periodType==="annuel"?ta.mensuelle:periodType==="trimestriel"?ta.trimestrielle:""} {selectedYear}
               </div>
               <div style={{overflowX:"auto"}}>
                 <div style={{display:"flex",alignItems:"flex-end",gap:8,minWidth:600,height:200,padding:"0 10px"}}>
                   {(periodType==="trimestriel"?dataTrimestrielle:dataMensuelle).map((d,i)=>{
-                    const maxCA = Math.max(...(periodType==="trimestriel"?dataTrimestrielle:dataMensuelle).map(x=>x.ca),1);
-                    const hCA = Math.round((d.ca/maxCA)*160);
-                    const hEnc = Math.round((d.encaisse/maxCA)*160);
-                    const isCurrentMonth = periodType==="mensuel"&&i===selectedMonth;
-                    const isCurrentQ = periodType==="trimestriel"&&i===selectedQuarter;
-                    return (
+                    const maxCA=Math.max(...(periodType==="trimestriel"?dataTrimestrielle:dataMensuelle).map(x=>x.ca),1);
+                    const hCA=Math.round((d.ca/maxCA)*160);
+                    const hEnc=Math.round((d.encaisse/maxCA)*160);
+                    const isActive=(periodType==="mensuel"&&i===selectedMonth)||(periodType==="trimestriel"&&i===selectedQuarter);
+                    return(
                       <div key={i} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:4}}>
                         <div style={{fontSize:10,color:"#00d97e",fontWeight:700}}>{d.ca>0?`${Math.round(d.ca/1000)}k`:""}</div>
                         <div style={{display:"flex",gap:2,alignItems:"flex-end",height:160}}>
-                          <div style={{width:14,height:hCA||2,background:isCurrentMonth||isCurrentQ?"#00d97e":"#2a3a4a",borderRadius:"3px 3px 0 0",transition:"height 0.3s"}}/>
-                          <div style={{width:14,height:hEnc||2,background:isCurrentMonth||isCurrentQ?"rgba(0,217,126,0.4)":"rgba(123,140,255,0.4)",borderRadius:"3px 3px 0 0",transition:"height 0.3s"}}/>
+                          <div style={{width:14,height:hCA||2,background:isActive?"#00d97e":"#2a3a4a",borderRadius:"3px 3px 0 0"}}/>
+                          <div style={{width:14,height:hEnc||2,background:isActive?"rgba(0,217,126,0.4)":"rgba(123,140,255,0.4)",borderRadius:"3px 3px 0 0"}}/>
                         </div>
-                        <div style={{fontSize:10,color:isCurrentMonth||isCurrentQ?"#00d97e":"#8891aa",fontWeight:isCurrentMonth||isCurrentQ?700:400}}>{d.mois||d.trimestre}</div>
+                        <div style={{fontSize:10,color:isActive?"#00d97e":"#8891aa",fontWeight:isActive?700:400}}>{d.mois||d.trimestre}</div>
                         <div style={{fontSize:9,color:"#8891aa"}}>{d.nb}v</div>
                       </div>
                     );
                   })}
                 </div>
                 <div style={{display:"flex",gap:20,marginTop:12,justifyContent:"center"}}>
-                  <div style={{display:"flex",alignItems:"center",gap:6}}><div style={{width:14,height:14,background:"#2a3a4a",borderRadius:3}}/><span style={{color:"#8891aa",fontSize:12}}>Chiffre d'affaires</span></div>
-                  <div style={{display:"flex",alignItems:"center",gap:6}}><div style={{width:14,height:14,background:"rgba(123,140,255,0.4)",borderRadius:3}}/><span style={{color:"#8891aa",fontSize:12}}>Encaissé</span></div>
+                  <div style={{display:"flex",alignItems:"center",gap:6}}><div style={{width:14,height:14,background:"#2a3a4a",borderRadius:3}}/><span style={{color:"#8891aa",fontSize:12}}>{ta.ca}</span></div>
+                  <div style={{display:"flex",alignItems:"center",gap:6}}><div style={{width:14,height:14,background:"rgba(123,140,255,0.4)",borderRadius:3}}/><span style={{color:"#8891aa",fontSize:12}}>{ta.encaisse}</span></div>
                 </div>
               </div>
             </div>
 
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:20,marginBottom:24}}>
-
               {/* TOP PRODUITS */}
               <div style={{background:"#1a1f2e",borderRadius:16,padding:20}}>
-                <div style={{color:"#f0f4ff",fontWeight:700,fontSize:17,marginBottom:16}}>🏆 Top Produits</div>
+                <div style={{color:"#f0f4ff",fontWeight:700,fontSize:17,marginBottom:16}}>{ta.top_produits}</div>
                 {topProduits.length===0
-                  ?<div style={{color:"#8891aa",fontSize:14,textAlign:"center",padding:20}}>Aucune vente sur cette période</div>
+                  ?<div style={{color:"#8891aa",fontSize:14,textAlign:"center",padding:20}}>{ta.aucune_vente}</div>
                   :topProduits.map(([n,q],i)=>(
                   <div key={n} style={{marginBottom:14}}>
                     <div style={{display:"flex",justifyContent:"space-between",marginBottom:5}}>
                       <span style={{color:"#f0f4ff",fontSize:14,fontWeight:600}}>#{i+1} {n}</span>
-                      <span style={{color:"#8891aa",fontSize:13}}>{q} unités</span>
+                      <span style={{color:"#8891aa",fontSize:13}}>{q} {ta.unites}</span>
                     </div>
                     <div style={{height:6,background:"#252b3b",borderRadius:99}}>
-                      <div style={{height:"100%",width:`${(q/topProduits[0][1])*100}%`,background:["#00d97e","#7b8cff","#ffd93d","#ff9f43","#ff6b6b"][i],borderRadius:99,transition:"width 0.5s"}}/>
+                      <div style={{height:"100%",width:`${(q/topProduits[0][1])*100}%`,background:["#00d97e","#7b8cff","#ffd93d","#ff9f43","#ff6b6b"][i],borderRadius:99}}/>
                     </div>
                   </div>
                 ))}
@@ -836,9 +847,9 @@ const AdminDashboardPC = ({user, onLogout, t, langue, setLangue}) => {
 
               {/* TOP CLIENTS */}
               <div style={{background:"#1a1f2e",borderRadius:16,padding:20}}>
-                <div style={{color:"#f0f4ff",fontWeight:700,fontSize:17,marginBottom:16}}>👥 Meilleurs Clients</div>
+                <div style={{color:"#f0f4ff",fontWeight:700,fontSize:17,marginBottom:16}}>{ta.top_clients}</div>
                 {topClients.length===0
-                  ?<div style={{color:"#8891aa",fontSize:14,textAlign:"center",padding:20}}>Aucun client enregistré</div>
+                  ?<div style={{color:"#8891aa",fontSize:14,textAlign:"center",padding:20}}>{ta.aucun_client}</div>
                   :topClients.map((c,i)=>(
                   <div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 0",borderBottom:"1px solid rgba(255,255,255,0.05)"}}>
                     <div style={{display:"flex",alignItems:"center",gap:10}}>
@@ -846,7 +857,7 @@ const AdminDashboardPC = ({user, onLogout, t, langue, setLangue}) => {
                       <div>
                         <div style={{color:"#f0f4ff",fontSize:14,fontWeight:600}}>{c.nom}</div>
                         {c.tel&&<div style={{color:"#8891aa",fontSize:12}}>📞 {c.tel}</div>}
-                        <div style={{color:"#8891aa",fontSize:12}}>{c.nb} achat(s)</div>
+                        <div style={{color:"#8891aa",fontSize:12}}>{c.nb} {ta.achats}</div>
                       </div>
                     </div>
                     <div style={{color:"#00d97e",fontWeight:800,fontSize:15}}>{fmt(c.total)}</div>
@@ -855,49 +866,47 @@ const AdminDashboardPC = ({user, onLogout, t, langue, setLangue}) => {
               </div>
             </div>
 
-            {/* PERFORMANCE VENDEURS */}
+            {/* VENDEURS */}
             {vendeurs.length>0&&<div style={{background:"#1a1f2e",borderRadius:16,padding:20,marginBottom:24}}>
-              <div style={{color:"#f0f4ff",fontWeight:700,fontSize:17,marginBottom:16}}>🧑‍💼 Performance Vendeurs</div>
-              <div style={{overflowX:"auto"}}>
-                <table style={{width:"100%",borderCollapse:"collapse"}}>
-                  <thead>
-                    <tr style={{borderBottom:"1px solid rgba(255,255,255,0.1)"}}>
-                      {["Vendeur","Nb Ventes","Chiffre d'affaires","Part du CA"].map(h=>(
-                        <th key={h} style={{color:"#8891aa",fontSize:13,fontWeight:600,textAlign:"left",padding:"8px 12px",textTransform:"uppercase"}}>{h}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {vendeurs.map((v,i)=>(
-                      <tr key={i} style={{borderBottom:"1px solid rgba(255,255,255,0.05)"}}>
-                        <td style={{color:"#f0f4ff",fontSize:14,fontWeight:600,padding:"12px"}}>{v.nom}</td>
-                        <td style={{color:"#7b8cff",fontSize:14,padding:"12px"}}>{v.nb}</td>
-                        <td style={{color:"#00d97e",fontSize:14,fontWeight:700,padding:"12px"}}>{fmt(v.ca)}</td>
-                        <td style={{padding:"12px"}}>
-                          <div style={{display:"flex",alignItems:"center",gap:8}}>
-                            <div style={{flex:1,height:6,background:"#252b3b",borderRadius:99}}>
-                              <div style={{height:"100%",width:`${stats.ca>0?Math.round((v.ca/stats.ca)*100):0}%`,background:"#00d97e",borderRadius:99}}/>
-                            </div>
-                            <span style={{color:"#8891aa",fontSize:12,minWidth:35}}>{stats.ca>0?Math.round((v.ca/stats.ca)*100):0}%</span>
-                          </div>
-                        </td>
-                      </tr>
+              <div style={{color:"#f0f4ff",fontWeight:700,fontSize:17,marginBottom:16}}>{ta.perf_vendeurs}</div>
+              <table style={{width:"100%",borderCollapse:"collapse"}}>
+                <thead>
+                  <tr style={{borderBottom:"1px solid rgba(255,255,255,0.1)"}}>
+                    {[ta.vendeur,ta.nb_ventes_col,ta.ca,ta.part_ca].map(h=>(
+                      <th key={h} style={{color:"#8891aa",fontSize:13,fontWeight:600,textAlign:"left",padding:"8px 12px",textTransform:"uppercase"}}>{h}</th>
                     ))}
-                  </tbody>
-                </table>
-              </div>
+                  </tr>
+                </thead>
+                <tbody>
+                  {vendeurs.map((v,i)=>(
+                    <tr key={i} style={{borderBottom:"1px solid rgba(255,255,255,0.05)"}}>
+                      <td style={{color:"#f0f4ff",fontSize:14,fontWeight:600,padding:"12px"}}>{v.nom}</td>
+                      <td style={{color:"#7b8cff",fontSize:14,padding:"12px"}}>{v.nb}</td>
+                      <td style={{color:"#00d97e",fontSize:14,fontWeight:700,padding:"12px"}}>{fmt(v.ca)}</td>
+                      <td style={{padding:"12px"}}>
+                        <div style={{display:"flex",alignItems:"center",gap:8}}>
+                          <div style={{flex:1,height:6,background:"#252b3b",borderRadius:99}}>
+                            <div style={{height:"100%",width:`${stats.ca>0?Math.round((v.ca/stats.ca)*100):0}%`,background:"#00d97e",borderRadius:99}}/>
+                          </div>
+                          <span style={{color:"#8891aa",fontSize:12,minWidth:35}}>{stats.ca>0?Math.round((v.ca/stats.ca)*100):0}%</span>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>}
 
             {/* DERNIÈRES VENTES */}
             <div style={{background:"#1a1f2e",borderRadius:16,padding:20}}>
-              <div style={{color:"#f0f4ff",fontWeight:700,fontSize:17,marginBottom:16}}>📋 Dernières ventes de la période ({vp.length})</div>
+              <div style={{color:"#f0f4ff",fontWeight:700,fontSize:17,marginBottom:16}}>{ta.dernieres_ventes} ({vp.length})</div>
               {vp.length===0
-                ?<div style={{color:"#8891aa",fontSize:14,textAlign:"center",padding:20}}>Aucune vente sur cette période</div>
+                ?<div style={{color:"#8891aa",fontSize:14,textAlign:"center",padding:20}}>{ta.aucune_vente}</div>
                 :<div style={{overflowX:"auto"}}>
                   <table style={{width:"100%",borderCollapse:"collapse"}}>
                     <thead>
                       <tr style={{borderBottom:"1px solid rgba(255,255,255,0.1)"}}>
-                        {["Facture","Date","Produit","Client","Vendeur","Montant","Payé","Mode"].map(h=>(
+                        {[ta.facture,ta.date,ta.produit,ta.client,ta.vendeur,ta.montant,ta.paye,ta.mode].map(h=>(
                           <th key={h} style={{color:"#8891aa",fontSize:12,fontWeight:600,textAlign:"left",padding:"8px 12px",textTransform:"uppercase"}}>{h}</th>
                         ))}
                       </tr>
@@ -914,7 +923,7 @@ const AdminDashboardPC = ({user, onLogout, t, langue, setLangue}) => {
                           <td style={{color:v.paye>=v.montant?"#00d97e":"#ff9f43",fontSize:13,fontWeight:700,padding:"10px 12px"}}>{fmt(v.paye)}</td>
                           <td style={{padding:"10px 12px"}}>
                             <span style={{background:v.mode==="cash"?"rgba(0,217,126,0.15)":v.mode==="mobile"?"rgba(123,140,255,0.15)":v.mode==="cheque"?"rgba(255,217,61,0.15)":"rgba(255,107,107,0.15)",color:v.mode==="cash"?"#00d97e":v.mode==="mobile"?"#7b8cff":v.mode==="cheque"?"#ffd93d":"#ff6b6b",borderRadius:6,padding:"3px 8px",fontSize:11,fontWeight:700}}>
-                              {v.mode==="cash"?"Cash":v.mode==="mobile"?"Mobile":v.mode==="cheque"?"Chèque":"Crédit"}
+                              {v.mode==="cash"?ta.cash:v.mode==="mobile"?ta.mobile:v.mode==="cheque"?ta.cheque:ta.credit}
                             </span>
                           </td>
                         </tr>
@@ -930,7 +939,6 @@ const AdminDashboardPC = ({user, onLogout, t, langue, setLangue}) => {
     </div>
   );
 };
-
 
 const AppBoutique = ({user,onLogout,t,langue,setLangue}) => {
   const [isPC,setIsPC]=useState(window.innerWidth>=900);
