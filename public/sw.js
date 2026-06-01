@@ -1,4 +1,4 @@
-const CACHE = "primogest-v5";
+const CACHE = "lapia-v1";
 const ASSETS = ["/", "/index.html"];
 
 self.addEventListener("install", e => {
