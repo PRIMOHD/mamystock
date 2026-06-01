@@ -1,6 +1,6 @@
 export const translations = {
   fr: {
-    appName: "PrimoGest",
+    appName: "Lapia",
     bonjour: "Bonjour 👋",
     accueil: "Accueil",
     stock: "Stock",
@@ -79,7 +79,7 @@ export const translations = {
     reste: "Reste",
   },
   en: {
-    appName: "PrimoGest",
+    appName: "Lapia",
     bonjour: "Hello 👋",
     accueil: "Home",
     stock: "Stock",
@@ -158,7 +158,7 @@ export const translations = {
     reste: "Remaining",
   },
   ar: {
-    appName: "PrimoGest",
+    appName: "Lapia",
     bonjour: "مرحباً 👋",
     accueil: "الرئيسية",
     stock: "المخزون",
