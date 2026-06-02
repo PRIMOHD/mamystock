@@ -1314,7 +1314,12 @@ const VentesPage = ({produits,ventes,clients,saveVente,saveClient,t,isProp,bouti
                   <div style={{flex:1,color:"#f0f4ff",fontSize:15,fontWeight:600}}>{x.nom}</div>
                   <div style={{display:"flex",alignItems:"center",gap:8}}>
                     <button onClick={()=>upd(x.id,x.qte-1)} style={{background:"#1a1f2e",border:"none",color:"#f0f4ff",width:30,height:30,borderRadius:8,cursor:"pointer",fontSize:16}}>−</button>
-                    <span style={{color:"#f0f4ff",fontWeight:700,minWidth:20,textAlign:"center",fontSize:16}}>{x.qte}</span>
+                    <input
+  type="number"
+  value={x.qte}
+  onChange={e=>{const v=parseInt(e.target.value)||1;upd(x.id,v);}}
+  style={{background:"#1a1f2e",border:"1px solid #2d3448",color:"#f0f4ff",fontWeight:700,width:40,textAlign:"center",fontSize:16,borderRadius:8,padding:"3px 0",fontFamily:"'Sora',sans-serif",outline:"none"}}
+/>
                     <button onClick={()=>upd(x.id,x.qte+1)} style={{background:"#1a1f2e",border:"none",color:"#f0f4ff",width:30,height:30,borderRadius:8,cursor:"pointer",fontSize:16}}>+</button>
                   </div>
                   <div style={{color:"#00d97e",fontWeight:700,fontSize:15}}>{fmt(x.prixVente*x.qte)}</div>
@@ -1402,7 +1407,9 @@ const VentesPage = ({produits,ventes,clients,saveVente,saveClient,t,isProp,bouti
 const DettesPage = ({clients,saveClient,ventes,t,boutique}) => {
   const [selected,setSelected]=useState(null); const [showPay,setShowPay]=useState(false); const [montant,setMontant]=useState("");
   const [showAdd,setShowAdd]=useState(false); const [nc,setNc]=useState({nom:"",telephone:"",quartier:""});
-  const pay=async()=>{if(!montant||!selected)return;const r=Math.min(+montant,selected.dette);const up={...selected,dette:selected.dette-r};await saveClient(up);setSelected(up);setMontant("");setShowPay(false);};
+  const pay=async()=>{if(!montant||!selected)return;const r=Math.min(+montant,selected.dette);const nouvelleDette = selected.dette - r;
+const up={...selected, dette:nouvelleDette, dateSolde: nouvelleDette<=0 ? new Date().toISOString() : null};
+await saveClient(up);setMontant("");setShowPay(false);};
   const addClient=async()=>{if(!nc.nom)return;await saveClient({...nc,dette:0});setNc({nom:"",telephone:"",quartier:""});setShowAdd(false);};
 
   if(selected){
@@ -1434,7 +1441,9 @@ const DettesPage = ({clients,saveClient,ventes,t,boutique}) => {
             <div key={v.id} style={{background:"#1a1f2e",borderRadius:12,padding:"13px 15px",marginBottom:8}}>
               <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}><div style={{color:"#f0f4ff",fontSize:15,fontWeight:600}}>{v.produit}</div><div style={{color:"#f0f4ff",fontWeight:700,fontSize:15}}>{fmt(v.montant)}</div></div>
               {(v.vendeurNom||v.vendeurTel)&&<div style={{color:"#7b8cff",fontSize:13}}>🧑‍💼 {v.vendeurNom}{v.vendeurTel?` | ${v.vendeurTel}`:""}</div>}
-              <div style={{display:"flex",justifyContent:"space-between"}}><div style={{color:"#8891aa",fontSize:13}}>#{v.factureId} | {fmtDate(getDate(v))}</div>{v.montant>v.paye&&<div style={{color:"#ff6b6b",fontSize:13}}>{t.reste}: {fmt(v.montant-v.paye)}</div>}</div>
+              <div style={{color:v.paye>=v.montant?"#00d97e":"#ff6b6b",fontSize:13,fontWeight:700}}>
+  {v.paye>=v.montant?"✓ Soldé":`${t.reste}: ${fmt(v.montant-v.paye)}`}
+            </div>
             </div>
           ))}
         </div>
@@ -1457,7 +1466,12 @@ const DettesPage = ({clients,saveClient,ventes,t,boutique}) => {
         <span style={{color:"#8891aa",fontSize:15}}>{t.totalDettes}</span>
         <span style={{color:"#ff6b6b",fontWeight:800,fontSize:16}}>{fmt(clients.reduce((s,c)=>s+(c.dette||0),0))}</span>
       </div>
-      {clients.map(c=>(
+      {clients.filter(c=>{
+  if(c.dette>0) return true;
+  if(!c.dateSolde) return true;
+  const semaine = 7*24*60*60*1000;
+  return (new Date()-new Date(c.dateSolde)) < semaine;
+}).map(c=>(
         <button key={c.id} onClick={()=>setSelected(c)} style={{background:"#1a1f2e",border:"none",borderRadius:12,padding:"14px 16px",cursor:"pointer",display:"flex",alignItems:"center",gap:12,textAlign:"left",width:"100%",marginBottom:10}}>
           <div style={{width:42,height:42,borderRadius:"50%",background:c.dette>0?"rgba(255,107,107,0.15)":"rgba(0,217,126,0.15)",display:"flex",alignItems:"center",justifyContent:"center"}}><Icon name="user" size={20} color={c.dette>0?"#ff6b6b":"#00d97e"}/></div>
           <div style={{flex:1}}><div style={{color:"#f0f4ff",fontWeight:700,fontSize:16}}>{c.nom}</div><div style={{color:"#8891aa",fontSize:14}}>📍 {c.quartier}{c.telephone?` | 📞 ${c.telephone}`:""}</div></div>
