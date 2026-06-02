@@ -1248,6 +1248,7 @@ const VentesPage = ({produits,ventes,clients,saveVente,saveClient,t,isProp,bouti
   const tot=pan.reduce((s,x)=>s+x.prixVente*x.qte,0);
   const pay=mode==="credit"?0:mode==="cheque"||mode==="mobile"?tot:(mpay?Math.min(+mpay,tot):tot);
   const det=tot-pay;
+  const det=tot-pay;
   const mon=mpay&&mode==="cash"?Math.max(0,+mpay-tot):0;
 
   const reset=()=>{setOk(false);setPan([]);setStep(1);setSearch("");setMode("cash");setMpay("");setNumeroCheque("");setModeClient("anonyme");setSelectedClientId("");setNewClientData({nom:"",telephone:""});setCid("");setNc({nom:"",telephone:"",quartier:""});setLast(null);};
@@ -1255,17 +1256,27 @@ const VentesPage = ({produits,ventes,clients,saveVente,saveClient,t,isProp,bouti
   const conf=async()=>{
     if(pan.length===0)return;
     if(lim&&lim.ventes!==Infinity){const dm=new Date();dm.setDate(1);dm.setHours(0,0,0,0);const vm=ventes.filter(v=>getDate(v)>=dm).length;if(vm>=lim.ventes){alert(`⚠️ Maximum ${lim.ventes} ventes/mois avec le plan Essai.`);return;}}
-    let cr=null,clientNom="",clientTel="";
-    if(modeClient==="existant"&&selectedClientId){
-      cr=selectedClientId;const c=clients.find(x=>x.id===selectedClientId);
-      if(c){clientNom=c.nom;clientTel=c.telephone||"";if(det>0)await saveClient({...c,dette:(c.dette||0)+det});}
-    }else if(modeClient==="nouveau"&&newClientData.nom){
-      const newId=await saveClient({...newClientData,quartier:"",dette:det});cr=newId;clientNom=newClientData.nom;clientTel=newClientData.telephone||"";
-    }else if(mode==="credit"&&cid){
-      cr=cid;const c=clients.find(x=>x.id===cid);
-      if(c){clientNom=c.nom;clientTel=c.telephone||"";if(det>0)await saveClient({...c,dette:(c.dette||0)+det});}
-    }
-    const vd={produit:pan.map(x=>x.nom).join(", "),quantite:pan.reduce((s,x)=>s+x.qte,0),montant:tot,paye:pay,mode,numeroCheque:numeroCheque||"",clientId:cr||null,clientNom:clientNom||"",clientTel:clientTel||"",items:pan.map(x=>({id:x.id,nom:x.nom,qte:x.qte,prixVente:x.prixVente}))};
+   let cr=null,clientNom="",clientTel="";
+if(modeClient==="existant"&&selectedClientId){
+  cr=selectedClientId;
+  const cl=clients.find(x=>x.id===selectedClientId);
+  if(cl){
+    clientNom=cl.nom;clientTel=cl.telephone||"";
+    await saveClient({...cl,dette:(cl.dette||0)+det});
+  }
+}else if(modeClient==="nouveau"&&newClientData.nom){
+  const newId=await saveClient({...newClientData,quartier:"",dette:det});
+  cr=newId;clientNom=newClientData.nom;clientTel=newClientData.telephone||"";
+}else if(modeClient==="anonyme"&&mode==="credit"){
+  if(cid&&cid!=="nouveau"){
+    cr=cid;
+    const cl=clients.find(x=>x.id===cid);
+    if(cl){clientNom=cl.nom;clientTel=cl.telephone||"";await saveClient({...cl,dette:(cl.dette||0)+det});}
+  }else if(cid==="nouveau"&&nc.nom){
+    const newId=await saveClient({...nc,dette:det});
+    cr=newId;clientNom=nc.nom;clientTel=nc.telephone||"";
+  }
+}
     const v=await saveVente(vd);
     if(v){setLast(v);setOk(true);}
   };
