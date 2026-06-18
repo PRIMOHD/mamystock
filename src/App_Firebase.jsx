@@ -2,14 +2,34 @@ import { useState, useEffect } from "react";
 import { db } from "./firebase";
 import { collection, doc, getDocs, addDoc, query, where, serverTimestamp, updateDoc } from "firebase/firestore";
 
-const ADMIN_PHONE = "+23562282320";
-const ADMIN_PASSWORD = "primogest@admin2026";
 const WHATSAPP = "23562282320";
+const LEGACY_SALT = "primogest_salt_2026"; // ancien sel statique, conservé UNIQUEMENT pour vérifier les comptes créés avant la mise à jour sécurité
 
-const hashPwd = async (pwd) => {
-  const data = new TextEncoder().encode(pwd + "primogest_salt_2026");
+const genSalt = () => {
+  const arr = new Uint8Array(16);
+  crypto.getRandomValues(arr);
+  return Array.from(arr).map(b => b.toString(16).padStart(2, "0")).join("");
+};
+
+const hashPwd = async (pwd, salt) => {
+  const data = new TextEncoder().encode(pwd + salt);
   const hash = await crypto.subtle.digest("SHA-256", data);
   return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, "0")).join("");
+};
+
+// Vérifie un mot de passe contre un compte, gère la transition depuis l'ancien système
+// Retourne { ok: bool, needsUpgrade: bool } — si needsUpgrade, l'appelant doit régénérer un sel et mettre à jour le document
+const verifyPwd = async (pwd, userDoc) => {
+  if (userDoc.salt) {
+    const h = await hashPwd(pwd, userDoc.salt);
+    return { ok: h === userDoc.password, needsUpgrade: false };
+  }
+  // compte ancien sans champ "salt" → vérifie avec l'ancien sel statique
+  const hLegacy = await hashPwd(pwd, LEGACY_SALT);
+  if (hLegacy === userDoc.password || pwd === userDoc.password) {
+    return { ok: true, needsUpgrade: true };
+  }
+  return { ok: false, needsUpgrade: false };
 };
 
 const PLANS = {
@@ -374,18 +394,22 @@ const Login = ({onLogin,t}) => {
     if(!tel||!pwd||bloque) return;
     setLoading(true); setErr("");
     try {
-      if(tel===ADMIN_PHONE&&pwd===ADMIN_PASSWORD){onLogin({telephone:tel,role:"admin",nom:"Admin Lapia",id:"admin"});return;}
       if(!navigator.onLine){
         const cached=JSON.parse(localStorage.getItem("pg_known_users")||"[]");
         const found=cached.find(u=>u.telephone===tel);
-        if(found){const h=await hashPwd(pwd);if(found.password===h||found.password===pwd){onLogin(found);return;}}
+        if(found){const r=await verifyPwd(pwd,found);if(r.ok){onLogin(found);return;}}
         setErr("Hors ligne — connectez-vous d'abord avec internet");setLoading(false);return;
       }
       const snap=await getDocs(query(collection(db,"users"),where("telephone","==",tel)));
       if(snap.empty){handleEchec();return;}
-      const ud={id:snap.docs[0].id,...snap.docs[0].data()};
-      const h=await hashPwd(pwd);
-      if(ud.password!==h&&ud.password!==pwd){handleEchec();return;}
+      const docId=snap.docs[0].id;
+      const ud={id:docId,...snap.docs[0].data()};
+      const r=await verifyPwd(pwd,ud);
+      if(!r.ok){handleEchec();return;}
+      if(r.needsUpgrade){
+        // migration silencieuse : on régénère un sel aléatoire pour ce compte
+        try{const newSalt=genSalt();const newHash=await hashPwd(pwd,newSalt);await updateDoc(doc(db,"users",docId),{password:newHash,salt:newSalt});ud.password=newHash;ud.salt=newSalt;}catch(e){}
+      }
       onLogin(ud);
     } catch(e){setErr("Erreur de connexion.");setLoading(false);}
   };
@@ -405,12 +429,14 @@ const Login = ({onLogin,t}) => {
       if(!snap.empty){setErr("Ce numéro est déjà enregistré");setLoading(false);return;}
       let loc=null;
       if(navigator.geolocation){try{const p=await new Promise((r,j)=>navigator.geolocation.getCurrentPosition(r,j,{timeout:5000}));loc={lat:p.coords.latitude,lng:p.coords.longitude};}catch(e){}}
-      const hashedPwd=await hashPwd(pwd);
+      const salt=genSalt();
+      const hashedPwd=await hashPwd(pwd,salt);
       const fin=new Date(Date.now()+30*24*60*60*1000).toISOString();
-      const ref=await addDoc(collection(db,"users"),{telephone:tel,password:hashedPwd,nomBoutique:nom,adresse:adr,role:"proprietaire",localisation:loc,plan:"essai",essaiDebut:new Date().toISOString(),essaiFin:fin,createdAt:serverTimestamp(),actif:true});
+      const ref=await addDoc(collection(db,"users"),{telephone:tel,password:hashedPwd,salt,nomBoutique:nom,adresse:adr,role:"proprietaire",localisation:loc,plan:"essai",essaiDebut:new Date().toISOString(),essaiFin:fin,createdAt:serverTimestamp(),actif:true});
       onLogin({id:ref.id,telephone:tel,nomBoutique:nom,adresse:adr,role:"proprietaire",localisation:loc,plan:"essai",essaiFin:fin});
     } catch(e){setErr("Erreur: "+e.message);setLoading(false);}
   };
+
 
   const mdpOublie = () => {
     if(!tel){setErr("Entrez d'abord votre numéro de téléphone");return;}
@@ -419,7 +445,7 @@ const Login = ({onLogin,t}) => {
 
   return (
     <div style={{minHeight:"100vh",background:"#111520",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:24,fontFamily:"'Sora',sans-serif"}}>
-      <img src="/logo.png" style={{width:72,height:72,borderRadius:20,marginBottom:20,objectFit:"contain"}} alt="Lapia"/>
+      <div style={{width:72,height:72,borderRadius:20,background:"linear-gradient(135deg,#00d97e,#00b360)",display:"flex",alignItems:"center",justifyContent:"center",fontWeight:800,color:"#fff",fontSize:30,marginBottom:20}}>L</div>
       <div style={{color:"#f0f4ff",fontWeight:800,fontSize:28,marginBottom:6}}>Lapia</div>
       <div style={{color:"#8891aa",fontSize:16,marginBottom:36}}>{t.connectezVous}</div>
       <div style={{width:"100%",maxWidth:380}}>
@@ -446,496 +472,100 @@ const Login = ({onLogin,t}) => {
   );
 };
 
-// ── ADMIN DASHBOARD PC ──
-// À coller dans App_Firebase.jsx, remplacer le composant AdminDashboard existant
+const AdminDashboard = ({user,onLogout,t,langue,setLangue}) => {
+  const [boutiques,setBoutiques]=useState([]);
+  const [ventes,setVentes]=useState([]);
+  const [loading,setLoading]=useState(true);
+  const [selected,setSelected]=useState(null);
+  const [showBilan,setShowBilan]=useState(false);
 
-// ── ADMIN DASHBOARD PC v2 — 3 langues FR/EN/AR ──
-// Remplace AdminDashboardPC dans App_Firebase.jsx
+  useEffect(()=>{(async()=>{
+    try{const [us,vs]=await Promise.all([getDocs(collection(db,"users")),getDocs(collection(db,"ventes"))]);
+    setBoutiques(us.docs.map(d=>({id:d.id,...d.data()})).filter(u=>u.role==="proprietaire"));
+    setVentes(vs.docs.map(d=>({id:d.id,...d.data()})));}catch(e){console.error(e);}
+    setLoading(false);
+  })();},[]);
 
-const AdminDashboardPC = ({user, onLogout, t, langue, setLangue}) => {
+  const totalCA=ventes.reduce((s,v)=>s+(v.montant||0),0);
+  const totalDettes=ventes.reduce((s,v)=>s+((v.montant||0)-(v.paye||0)),0);
+  const pm={};ventes.forEach(v=>{pm[v.produit]=(pm[v.produit]||0)+(v.quantite||0);});
+  const top=Object.entries(pm).sort((a,b)=>b[1]-a[1]).slice(0,5);
+  const bilan=(b)=>{const now=new Date(),tr=Math.floor(now.getMonth()/3)+1,debut=new Date(now.getFullYear(),(tr-1)*3,1);const vb=ventes.filter(v=>v.boutiqueId===b.id&&getDate(v)>=debut);return{tr,ca:vb.reduce((s,v)=>s+(v.montant||0),0),enc:vb.reduce((s,v)=>s+(v.paye||0),0),det:vb.reduce((s,v)=>s+((v.montant||0)-(v.paye||0)),0),nb:vb.length};};
+  const getBadge=(b)=>{const p=PLANS[b.plan||"essai"];if((b.plan==="essai"||!b.plan)&&b.essaiFin&&new Date()>new Date(b.essaiFin))return{label:"EXPIRÉ",color:"#ff4757"};return{label:p?.label||"ESSAI",color:p?.color||"#7b8cff"};};
 
-  // Traductions Admin
-  const TA = {
-    fr: {
-      titre:"Lapia Admin", superAdmin:"👑 SUPER ADMIN",
-      boutique:"Boutique", periode:"Période",
-      mensuel:"📅 Mensuel", trimestriel:"📊 Trimestriel", annuel:"📈 Annuel",
-      annee:"Année", mois_label:"Mois", trimestre_label:"Trimestre",
-      deconnexion:"Déconnexion", imprimer:"🖨️ Imprimer le bilan",
-      bilan:"Bilan", select_boutique:"← Sélectionne une boutique dans le menu",
-      ca:"Chiffre d'affaires", encaisse:"Encaissé", dettes:"Dettes en cours",
-      nb_ventes:"Nombre de ventes", modes:"💳 Modes de paiement",
-      cash:"💵 Cash", mobile:"📱 Mobile Money", cheque:"🏦 Chèque", credit:"📋 Crédit",
-      du_ca:"du CA", evolution:"📈 Évolution",
-      mensuelle:"mensuelle", trimestrielle:"trimestrielle",
-      top_produits:"🏆 Top Produits", top_clients:"👥 Meilleurs Clients",
-      perf_vendeurs:"🧑‍💼 Performance Vendeurs",
-      vendeur:"Vendeur", nb_ventes_col:"Nb Ventes", part_ca:"Part du CA",
-      dernieres_ventes:"📋 Dernières ventes de la période",
-      aucune_vente:"Aucune vente sur cette période",
-      aucun_client:"Aucun client enregistré",
-      facture:"Facture", date:"Date", produit:"Produit",
-      client:"Client", montant:"Montant", paye:"Payé", mode:"Mode",
-      unites:"unités", achats:"achat(s)",
-      mois: ["Janvier","Février","Mars","Avril","Mai","Juin","Juillet","Août","Septembre","Octobre","Novembre","Décembre"],
-      trimestres: ["T1 (Jan-Mar)","T2 (Avr-Jun)","T3 (Jul-Sep)","T4 (Oct-Déc)"],
-      genere_le:"Généré le", periode_label:"Période",
-      resume:"💰 Résumé Financier",
-    },
-    en: {
-      titre:"Lapia Admin", superAdmin:"👑 SUPER ADMIN",
-      boutique:"Store", periode:"Period",
-      mensuel:"📅 Monthly", trimestriel:"📊 Quarterly", annuel:"📈 Annual",
-      annee:"Year", mois_label:"Month", trimestre_label:"Quarter",
-      deconnexion:"Log out", imprimer:"🖨️ Print report",
-      bilan:"Report", select_boutique:"← Select a store from the menu",
-      ca:"Revenue", encaisse:"Collected", dettes:"Outstanding debts",
-      nb_ventes:"Number of sales", modes:"💳 Payment methods",
-      cash:"💵 Cash", mobile:"📱 Mobile Money", cheque:"🏦 Cheque", credit:"📋 Credit",
-      du_ca:"of revenue", evolution:"📈 Evolution",
-      mensuelle:"monthly", trimestrielle:"quarterly",
-      top_produits:"🏆 Top Products", top_clients:"👥 Best Customers",
-      perf_vendeurs:"🧑‍💼 Seller Performance",
-      vendeur:"Seller", nb_ventes_col:"Sales", part_ca:"Revenue share",
-      dernieres_ventes:"📋 Latest sales of the period",
-      aucune_vente:"No sales in this period",
-      aucun_client:"No registered customers",
-      facture:"Invoice", date:"Date", produit:"Product",
-      client:"Customer", montant:"Amount", paye:"Paid", mode:"Method",
-      unites:"units", achats:"purchase(s)",
-      mois: ["January","February","March","April","May","June","July","August","September","October","November","December"],
-      trimestres: ["Q1 (Jan-Mar)","Q2 (Apr-Jun)","Q3 (Jul-Sep)","Q4 (Oct-Dec)"],
-      genere_le:"Generated on", periode_label:"Period",
-      resume:"💰 Financial Summary",
-    },
-    ar: {
-      titre:"Lapia Admin", superAdmin:"👑 مدير عام",
-      boutique:"المتجر", periode:"الفترة",
-      mensuel:"📅 شهري", trimestriel:"📊 فصلي", annuel:"📈 سنوي",
-      annee:"السنة", mois_label:"الشهر", trimestre_label:"الفصل",
-      deconnexion:"تسجيل الخروج", imprimer:"🖨️ طباعة التقرير",
-      bilan:"تقرير", select_boutique:"← اختر متجراً من القائمة",
-      ca:"رقم الأعمال", encaisse:"المحصل", dettes:"الديون الجارية",
-      nb_ventes:"عدد المبيعات", modes:"💳 طرق الدفع",
-      cash:"💵 نقداً", mobile:"📱 موبايل موني", cheque:"🏦 شيك", credit:"📋 دين",
-      du_ca:"من رقم الأعمال", evolution:"📈 التطور",
-      mensuelle:"الشهري", trimestrielle:"الفصلي",
-      top_produits:"🏆 أفضل المنتجات", top_clients:"👥 أفضل العملاء",
-      perf_vendeurs:"🧑‍💼 أداء البائعين",
-      vendeur:"البائع", nb_ventes_col:"المبيعات", part_ca:"حصة رقم الأعمال",
-      dernieres_ventes:"📋 آخر مبيعات الفترة",
-      aucune_vente:"لا توجد مبيعات في هذه الفترة",
-      aucun_client:"لا يوجد عملاء مسجلون",
-      facture:"فاتورة", date:"التاريخ", produit:"المنتج",
-      client:"العميل", montant:"المبلغ", paye:"المدفوع", mode:"الطريقة",
-      unites:"وحدات", achats:"شراء",
-      mois: ["يناير","فبراير","مارس","أبريل","مايو","يونيو","يوليو","أغسطس","سبتمبر","أكتوبر","نوفمبر","ديسمبر"],
-      trimestres: ["ف1 (يناير-مارس)","ف2 (أبريل-يونيو)","ف3 (يوليو-سبتمبر)","ف4 (أكتوبر-ديسمبر)"],
-      genere_le:"تم الإنشاء في", periode_label:"الفترة",
-      resume:"💰 ملخص مالي",
-    }
-  };
+  if(loading)return<div style={{color:"#f0f4ff",textAlign:"center",padding:40,minHeight:"100vh",background:"#111520",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'Sora',sans-serif",fontSize:18}}>{t.chargement}</div>;
 
-  const ta = TA[langue] || TA.fr;
-  const isRTL = langue === "ar";
-
-  const [boutiques, setBoutiques] = useState([]);
-  const [ventes, setVentes] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [selectedBoutique, setSelectedBoutique] = useState(null);
-  const [periodType, setPeriodType] = useState("mensuel");
-  const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth());
-  const [selectedQuarter, setSelectedQuarter] = useState(Math.floor(new Date().getMonth()/3));
-  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
-
-  useEffect(() => {
-    (async () => {
-      try {
-        const [us, vs] = await Promise.all([
-          getDocs(collection(db, "users")),
-          getDocs(collection(db, "ventes"))
-        ]);
-        const b = us.docs.map(d=>({id:d.id,...d.data()})).filter(u=>u.role==="proprietaire");
-        const v = vs.docs.map(d=>({id:d.id,...d.data()}));
-        setBoutiques(b);
-        setVentes(v);
-        if (b.length > 0) setSelectedBoutique(b[0]);
-      } catch(e) { console.error(e); }
-      setLoading(false);
-    })();
-  }, []);
-
-  const getVentesBoutique = () => selectedBoutique ? ventes.filter(v => v.boutiqueId === selectedBoutique.id) : [];
-
-  const getVentesPeriode = () => {
-    const vb = getVentesBoutique();
-    if (periodType === "mensuel") {
-      return vb.filter(v => { const d=getDate(v); return d.getMonth()===selectedMonth && d.getFullYear()===selectedYear; });
-    } else if (periodType === "trimestriel") {
-      const debut = selectedQuarter * 3;
-      return vb.filter(v => { const d=getDate(v); return d.getMonth()>=debut && d.getMonth()<debut+3 && d.getFullYear()===selectedYear; });
-    } else {
-      return vb.filter(v => getDate(v).getFullYear()===selectedYear);
-    }
-  };
-
-  const calcStats = (vs) => ({
-    ca: vs.reduce((s,v)=>s+(v.montant||0),0),
-    enc: vs.reduce((s,v)=>s+(v.paye||0),0),
-    det: vs.reduce((s,v)=>s+((v.montant||0)-(v.paye||0)),0),
-    nb: vs.length,
-    cash: vs.filter(v=>v.mode==="cash").reduce((s,v)=>s+(v.paye||0),0),
-    mobile: vs.filter(v=>v.mode==="mobile").reduce((s,v)=>s+(v.paye||0),0),
-    cheque: vs.filter(v=>v.mode==="cheque").reduce((s,v)=>s+(v.paye||0),0),
-    credit: vs.filter(v=>v.mode==="credit").reduce((s,v)=>s+(v.montant||0),0),
-  });
-
-  const getDataMensuelle = () => {
-    const vb = getVentesBoutique();
-    return ta.mois.map((m, i) => {
-      const vm = vb.filter(v => { const d=getDate(v); return d.getMonth()===i && d.getFullYear()===selectedYear; });
-      return { mois:m.substring(0,3), ca:vm.reduce((s,v)=>s+(v.montant||0),0), encaisse:vm.reduce((s,v)=>s+(v.paye||0),0), nb:vm.length };
-    });
-  };
-
-  const getDataTrimestrielle = () => {
-    const vb = getVentesBoutique();
-    return [0,1,2,3].map(i => {
-      const debut = i * 3;
-      const vm = vb.filter(v => { const d=getDate(v); return d.getMonth()>=debut && d.getMonth()<debut+3 && d.getFullYear()===selectedYear; });
-      return { trimestre:`T${i+1}`, ca:vm.reduce((s,v)=>s+(v.montant||0),0), encaisse:vm.reduce((s,v)=>s+(v.paye||0),0), nb:vm.length };
-    });
-  };
-
-  const vp = getVentesPeriode();
-  const stats = calcStats(vp);
-  const dataMensuelle = getDataMensuelle();
-  const dataTrimestrielle = getDataTrimestrielle();
-
-  const pm = {}; vp.forEach(v=>{ pm[v.produit]=(pm[v.produit]||0)+(v.quantite||0); });
-  const topProduits = Object.entries(pm).sort((a,b)=>b[1]-a[1]).slice(0,5);
-
-  const cm = {}; vp.forEach(v=>{ if(v.clientNom){ const k=v.clientId||v.clientNom; if(!cm[k])cm[k]={nom:v.clientNom,tel:v.clientTel||"",total:0,nb:0}; cm[k].total+=v.montant||0; cm[k].nb+=1; } });
-  const topClients = Object.values(cm).sort((a,b)=>b.total-a.total).slice(0,5);
-
-  const vm2 = {}; vp.forEach(v=>{ if(v.vendeurId){ if(!vm2[v.vendeurId])vm2[v.vendeurId]={nom:v.vendeurNom||"Vendeur",nb:0,ca:0}; vm2[v.vendeurId].nb+=1; vm2[v.vendeurId].ca+=v.montant||0; } });
-  const vendeurs = Object.values(vm2).sort((a,b)=>b.ca-a.ca);
-
-  const getPeriodeLabel = () => {
-    if(periodType==="mensuel") return `${ta.mois[selectedMonth]} ${selectedYear}`;
-    if(periodType==="trimestriel") return `${ta.trimestres[selectedQuarter]} ${selectedYear}`;
-    return `${ta.annee} ${selectedYear}`;
-  };
-
-  const imprimer = () => {
-    const w = window.open("","_blank");
-    const boutNom = selectedBoutique?.nomBoutique || "Boutique";
-    const periode = getPeriodeLabel();
-    w.document.write(`<!DOCTYPE html><html dir="${isRTL?'rtl':'ltr'}"><head><title>${ta.bilan} ${boutNom} — ${periode}</title>
-    <style>
-      body{font-family:Arial,sans-serif;padding:40px;color:#333;max-width:800px;margin:0 auto;direction:${isRTL?'rtl':'ltr'}}
-      h1{color:#00a85f;border-bottom:3px solid #00a85f;padding-bottom:10px}
-      h2{color:#555;margin-top:30px;border-left:4px solid #00a85f;padding-left:10px}
-      .grid{display:grid;grid-template-columns:repeat(4,1fr);gap:15px;margin:20px 0}
-      .card{background:#f9f9f9;border:1px solid #ddd;border-radius:8px;padding:15px;text-align:center}
-      .card-val{font-size:22px;font-weight:800;color:#00a85f;margin:8px 0}
-      .card-label{font-size:12px;color:#888;text-transform:uppercase}
-      table{width:100%;border-collapse:collapse;margin-top:15px}
-      th{background:#00a85f;color:white;padding:10px;text-align:left;font-size:13px}
-      td{padding:10px;border-bottom:1px solid #eee;font-size:13px}
-      tr:nth-child(even){background:#f9f9f9}
-      .footer{margin-top:40px;text-align:center;color:#999;font-size:12px;border-top:1px solid #eee;padding-top:20px}
-    </style></head><body>
-    <h1>📊 ${ta.bilan} — ${boutNom}</h1>
-    <p style="color:#666">${ta.periode_label} : <strong>${periode}</strong> | ${ta.genere_le} : <strong>${new Date().toLocaleDateString("fr-FR")}</strong></p>
-    <h2>${ta.resume}</h2>
-    <div class="grid">
-      <div class="card"><div class="card-label">${ta.ca}</div><div class="card-val">${fmt(stats.ca)}</div></div>
-      <div class="card"><div class="card-label">${ta.encaisse}</div><div class="card-val" style="color:#00a85f">${fmt(stats.enc)}</div></div>
-      <div class="card"><div class="card-label">${ta.dettes}</div><div class="card-val" style="color:#e53935">${fmt(stats.det)}</div></div>
-      <div class="card"><div class="card-label">${ta.nb_ventes}</div><div class="card-val" style="color:#1565c0">${stats.nb}</div></div>
-    </div>
-    <h2>${ta.modes}</h2>
-    <div class="grid">
-      <div class="card"><div class="card-label">${ta.cash}</div><div class="card-val">${fmt(stats.cash)}</div></div>
-      <div class="card"><div class="card-label">${ta.mobile}</div><div class="card-val">${fmt(stats.mobile)}</div></div>
-      <div class="card"><div class="card-label">${ta.cheque}</div><div class="card-val">${fmt(stats.cheque)}</div></div>
-      <div class="card"><div class="card-label">${ta.credit}</div><div class="card-val" style="color:#e53935">${fmt(stats.credit)}</div></div>
-    </div>
-    ${topProduits.length>0?`<h2>${ta.top_produits}</h2><table><tr><th>#</th><th>${ta.produit}</th><th>${ta.unites}</th></tr>${topProduits.map(([n,q],i)=>`<tr><td>${i+1}</td><td>${n}</td><td>${q}</td></tr>`).join("")}</table>`:""}
-    ${topClients.length>0?`<h2>${ta.top_clients}</h2><table><tr><th>#</th><th>${ta.client}</th><th>📞</th><th>${ta.achats}</th><th>${ta.montant}</th></tr>${topClients.map((c,i)=>`<tr><td>${i+1}</td><td>${c.nom}</td><td>${c.tel||"-"}</td><td>${c.nb}</td><td>${fmt(c.total)}</td></tr>`).join("")}</table>`:""}
-    ${vendeurs.length>0?`<h2>${ta.perf_vendeurs}</h2><table><tr><th>${ta.vendeur}</th><th>${ta.nb_ventes_col}</th><th>${ta.ca}</th></tr>${vendeurs.map(v=>`<tr><td>${v.nom}</td><td>${v.nb}</td><td>${fmt(v.ca)}</td></tr>`).join("")}</table>`:""}
-    <div class="footer">Lapia — lapiagest.vercel.app</div>
-    </body></html>`);
-    w.document.close(); w.print();
-  };
-
-  if(loading) return <div style={{minHeight:"100vh",background:"#111520",display:"flex",alignItems:"center",justifyContent:"center",color:"#f0f4ff",fontSize:18,fontFamily:"'Sora',sans-serif"}}>{t.chargement}</div>;
-
-  const SIDEBAR_W = 260;
-
-  return (
-    <div style={{minHeight:"100vh",background:"#111520",fontFamily:"'Sora',sans-serif",display:"flex",direction:isRTL?"rtl":"ltr"}}>
-
-      {/* SIDEBAR */}
-      <div style={{width:SIDEBAR_W,background:"#1a1f2e",borderRight:isRTL?"none":"1px solid rgba(255,255,255,0.06)",borderLeft:isRTL?"1px solid rgba(255,255,255,0.06)":"none",display:"flex",flexDirection:"column",position:"fixed",[isRTL?"right":"left"]:0,top:0,bottom:0,padding:"20px 0",zIndex:100}}>
-        <div style={{padding:"0 20px 24px",borderBottom:"1px solid rgba(255,255,255,0.06)"}}>
-          <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:16}}>
-            <div style={{width:42,height:42,borderRadius:12,background:"linear-gradient(135deg,#00d97e,#00b360)",display:"flex",alignItems:"center",justifyContent:"center",fontWeight:800,color:"#fff",fontSize:18}}>L</div>
-            <div>
-              <div style={{color:"#f0f4ff",fontWeight:800,fontSize:17}}>{ta.titre}</div>
-              <div style={{color:"#00d97e",fontSize:11,fontWeight:700}}>{ta.superAdmin}</div>
-            </div>
-          </div>
-          <div style={{display:"flex",gap:4}}>
-            {["fr","en","ar"].map(l=><button key={l} onClick={()=>{setLangue(l);localStorage.setItem("primogest_langue",l);}} style={{background:langue===l?"#00d97e":"#252b3b",border:"none",borderRadius:4,padding:"3px 8px",color:langue===l?"#fff":"#8891aa",fontSize:11,fontWeight:700,cursor:"pointer"}}>{l.toUpperCase()}</button>)}
-          </div>
+  return(
+    <div style={{maxWidth:600,margin:"0 auto",minHeight:"100vh",background:"#111520",fontFamily:"'Sora',sans-serif",paddingBottom:40}}>
+      <div style={{background:"linear-gradient(135deg,#1a1f2e,#252b3b)",padding:"16px 20px",borderBottom:"1px solid rgba(0,217,126,0.2)",display:"flex",alignItems:"center",justifyContent:"space-between",position:"sticky",top:0,zIndex:100}}>
+        <div style={{display:"flex",alignItems:"center",gap:10}}>
+          <div style={{width:40,height:40,borderRadius:10,background:"linear-gradient(135deg,#00d97e,#00b360)",display:"flex",alignItems:"center",justifyContent:"center",fontWeight:800,color:"#fff",fontSize:16}}>L</div>
+          <div><div style={{color:"#f0f4ff",fontWeight:800,fontSize:17}}>Admin Lapia</div><div style={{color:"#00d97e",fontSize:12,fontWeight:700}}>👑 SUPER ADMIN</div></div>
         </div>
-
-        <div style={{padding:"16px 20px",borderBottom:"1px solid rgba(255,255,255,0.06)"}}>
-          <div style={{color:"#8891aa",fontSize:11,fontWeight:600,textTransform:"uppercase",marginBottom:10}}>{ta.boutique}</div>
-          {boutiques.map(b=>(
-            <button key={b.id} onClick={()=>setSelectedBoutique(b)}
-              style={{display:"flex",alignItems:"center",gap:10,padding:"10px 12px",borderRadius:10,border:"none",background:selectedBoutique?.id===b.id?"rgba(0,217,126,0.1)":"transparent",cursor:"pointer",width:"100%",textAlign:"left",marginBottom:4}}>
-              <div style={{width:8,height:8,borderRadius:"50%",background:selectedBoutique?.id===b.id?"#00d97e":"#555",flexShrink:0}}/>
+        <div style={{display:"flex",gap:6,alignItems:"center"}}>
+          {["fr","en","ar"].map(l=><button key={l} onClick={()=>{setLangue(l);localStorage.setItem("lapia_langue",l);}} style={{background:langue===l?"#00d97e":"#252b3b",border:"none",borderRadius:6,padding:"4px 10px",color:langue===l?"#fff":"#8891aa",fontSize:12,fontWeight:700,cursor:"pointer"}}>{l.toUpperCase()}</button>)}
+          <button onClick={onLogout} style={{background:"#252b3b",border:"none",borderRadius:10,padding:8,cursor:"pointer",display:"flex",marginLeft:4}}><Icon name="logout" size={18} color="#ff6b6b"/></button>
+        </div>
+      </div>
+      <div style={{padding:"20px 16px"}}>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:24}}>
+          {[{label:t.boutiques,value:boutiques.length,color:"#7b8cff",icon:"store"},{label:t.transactions_globales,value:ventes.length,color:"#ffd93d",icon:"chart"},{label:"Chiffre d'affaires",value:fmt(totalCA),color:"#00d97e",icon:"money"},{label:"Dettes totales",value:fmt(totalDettes),color:"#ff6b6b",icon:"dette"}].map(c=>(
+            <div key={c.label} style={{background:"#1a1f2e",borderRadius:16,padding:16,border:`1px solid ${c.color}22`}}>
+              <Icon name={c.icon} size={20} color={c.color}/>
+              <div style={{color:c.color,fontWeight:800,fontSize:17,marginTop:8}}>{c.value}</div>
+              <div style={{color:"#8891aa",fontSize:13}}>{c.label}</div>
+            </div>
+          ))}
+        </div>
+        {top.length>0&&<div style={{background:"#1a1f2e",borderRadius:16,padding:16,marginBottom:20}}>
+          <div style={{color:"#f0f4ff",fontWeight:700,fontSize:17,marginBottom:14}}>{t.topProduits}</div>
+          {top.map(([n,q],i)=>(
+            <div key={n} style={{marginBottom:10}}>
+              <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}><span style={{color:"#f0f4ff",fontSize:15,fontWeight:600}}>#{i+1} {n}</span><span style={{color:"#8891aa",fontSize:14}}>{q} unités</span></div>
+              <div style={{height:5,background:"#252b3b",borderRadius:99}}><div style={{height:"100%",width:`${(q/top[0][1])*100}%`,background:["#00d97e","#7b8cff","#ffd93d","#ff9f43","#ff6b6b"][i],borderRadius:99}}/></div>
+            </div>
+          ))}
+        </div>}
+        <div style={{color:"#f0f4ff",fontWeight:700,fontSize:18,marginBottom:12}}>🏪 {t.boutiques} ({boutiques.length})</div>
+        {boutiques.map(b=>{
+          const vb=ventes.filter(v=>v.boutiqueId===b.id);
+          const ca=vb.reduce((s,v)=>s+(v.montant||0),0);
+          const bg=getBadge(b);
+          const jr=b.essaiFin?Math.max(0,Math.ceil((new Date(b.essaiFin)-new Date())/(1000*60*60*24))):0;
+          return(<div key={b.id} style={{background:"#1a1f2e",borderRadius:14,padding:16,marginBottom:12,border:"1px solid rgba(255,255,255,0.05)"}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:10}}>
               <div>
-                <div style={{color:selectedBoutique?.id===b.id?"#00d97e":"#f0f4ff",fontWeight:600,fontSize:13}}>{b.nomBoutique}</div>
-                <div style={{color:"#8891aa",fontSize:11}}>📞 {b.telephone}</div>
+                <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4}}>
+                  <span style={{color:"#f0f4ff",fontWeight:700,fontSize:16}}>{b.nomBoutique}</span>
+                  <span style={{background:`${bg.color}22`,border:`1px solid ${bg.color}44`,color:bg.color,borderRadius:6,padding:"2px 8px",fontSize:12,fontWeight:700}}>{bg.label}</span>
+                </div>
+                <div style={{color:"#8891aa",fontSize:14}}>📞 {b.telephone}</div>
+                {b.adresse&&<div style={{color:"#8891aa",fontSize:14}}>📍 {b.adresse}</div>}
+                {(b.plan==="essai"||!b.plan)&&jr>0&&<div style={{color:"#ff9f43",fontSize:13}}>⏰ {jr} jours restants</div>}
+                {(b.plan==="essai"||!b.plan)&&jr===0&&b.essaiFin&&<div style={{color:"#ff4757",fontSize:13}}>🔴 Essai expiré</div>}
               </div>
+              <div style={{textAlign:"right"}}><div style={{color:"#00d97e",fontWeight:800,fontSize:16}}>{fmt(ca)}</div><div style={{color:"#8891aa",fontSize:13}}>{vb.length} ventes</div></div>
+            </div>
+            <button onClick={()=>{setSelected(b);setShowBilan(true);}} style={{width:"100%",background:"rgba(123,140,255,0.15)",border:"1px solid rgba(123,140,255,0.3)",borderRadius:10,padding:"10px 14px",color:"#7b8cff",fontSize:14,fontWeight:700,cursor:"pointer",fontFamily:"'Sora',sans-serif"}}>
+              📊 {t.bilan_trimestriel}
             </button>
-          ))}
-        </div>
-
-        <div style={{padding:"16px 20px",flex:1,overflowY:"auto"}}>
-          <div style={{color:"#8891aa",fontSize:11,fontWeight:600,textTransform:"uppercase",marginBottom:10}}>{ta.periode}</div>
-          {[{val:"mensuel",label:ta.mensuel},{val:"trimestriel",label:ta.trimestriel},{val:"annuel",label:ta.annuel}].map(p=>(
-            <button key={p.val} onClick={()=>setPeriodType(p.val)}
-              style={{display:"flex",alignItems:"center",gap:10,padding:"10px 12px",borderRadius:10,border:"none",background:periodType===p.val?"rgba(123,140,255,0.1)":"transparent",cursor:"pointer",width:"100%",textAlign:"left",marginBottom:4}}>
-              <span style={{color:periodType===p.val?"#7b8cff":"#8891aa",fontWeight:600,fontSize:14,fontFamily:"'Sora',sans-serif"}}>{p.label}</span>
-            </button>
-          ))}
-          <div style={{marginTop:16}}>
-            <div style={{color:"#8891aa",fontSize:11,fontWeight:600,textTransform:"uppercase",marginBottom:8}}>{ta.annee}</div>
-            <select value={selectedYear} onChange={e=>setSelectedYear(+e.target.value)} style={{...IS,fontSize:14}}>
-              {[2024,2025,2026,2027].map(y=><option key={y} value={y}>{y}</option>)}
-            </select>
-          </div>
-          {periodType==="mensuel"&&<div style={{marginTop:12}}>
-            <div style={{color:"#8891aa",fontSize:11,fontWeight:600,textTransform:"uppercase",marginBottom:8}}>{ta.mois_label}</div>
-            <select value={selectedMonth} onChange={e=>setSelectedMonth(+e.target.value)} style={{...IS,fontSize:14}}>
-              {ta.mois.map((m,i)=><option key={i} value={i}>{m}</option>)}
-            </select>
-          </div>}
-          {periodType==="trimestriel"&&<div style={{marginTop:12}}>
-            <div style={{color:"#8891aa",fontSize:11,fontWeight:600,textTransform:"uppercase",marginBottom:8}}>{ta.trimestre_label}</div>
-            <select value={selectedQuarter} onChange={e=>setSelectedQuarter(+e.target.value)} style={{...IS,fontSize:14}}>
-              {ta.trimestres.map((tr,i)=><option key={i} value={i}>{tr}</option>)}
-            </select>
-          </div>}
-        </div>
-
-        <div style={{padding:"16px 20px",borderTop:"1px solid rgba(255,255,255,0.06)"}}>
-          <button onClick={onLogout} style={{display:"flex",alignItems:"center",justifyContent:"center",gap:8,background:"rgba(255,107,107,0.1)",border:"1px solid rgba(255,107,107,0.2)",borderRadius:8,padding:"10px",color:"#ff6b6b",fontSize:13,fontWeight:700,cursor:"pointer",fontFamily:"'Sora',sans-serif",width:"100%"}}>
-            <Icon name="logout" size={16} color="#ff6b6b"/> {ta.deconnexion}
-          </button>
-        </div>
+          </div>);
+        })}
+        {boutiques.length===0&&<div style={{color:"#8891aa",textAlign:"center",padding:40,fontSize:16}}>Aucune boutique enregistrée</div>}
       </div>
-
-      {/* CONTENU */}
-      <div style={{marginLeft:isRTL?0:SIDEBAR_W,marginRight:isRTL?SIDEBAR_W:0,flex:1,padding:"30px",overflowY:"auto"}}>
-
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:30}}>
-          <div>
-            <h1 style={{margin:0,color:"#f0f4ff",fontSize:26,fontWeight:800}}>{selectedBoutique?.nomBoutique||""}</h1>
-            <div style={{color:"#8891aa",fontSize:15,marginTop:4}}>📊 {ta.bilan} — {getPeriodeLabel()}</div>
-            {selectedBoutique&&<div style={{color:"#8891aa",fontSize:13,marginTop:2}}>📞 {selectedBoutique.telephone}{selectedBoutique.adresse?` | 📍 ${selectedBoutique.adresse}`:""}</div>}
+      {showBilan&&selected&&(()=>{const b=bilan(selected);return(
+        <Modal titre={`📊 Bilan T${b.tr} — ${selected.nomBoutique}`} onClose={()=>setShowBilan(false)}>
+          <div style={{background:"#252b3b",borderRadius:14,padding:20,marginBottom:16}}>
+            <div style={{color:"#8891aa",fontSize:15,marginBottom:16}}>Trimestre {b.tr} — {new Date().getFullYear()}</div>
+            {[{l:"Chiffre d'affaires",v:fmt(b.ca),c:"#f0f4ff"},{l:"Encaissé",v:fmt(b.enc),c:"#00d97e"},{l:"Dettes en cours",v:fmt(b.det),c:"#ff6b6b"},{l:"Nb ventes",v:b.nb,c:"#ffd93d"}].map(x=>(
+              <div key={x.l} style={{display:"flex",justifyContent:"space-between",padding:"12px 0",borderBottom:"1px solid rgba(255,255,255,0.05)"}}>
+                <span style={{color:"#8891aa",fontSize:16}}>{x.l}</span><span style={{color:x.c,fontWeight:700,fontSize:16}}>{x.v}</span>
+              </div>
+            ))}
           </div>
-          <button onClick={imprimer}
-            style={{background:"linear-gradient(135deg,#00d97e,#00b360)",border:"none",borderRadius:12,padding:"12px 24px",color:"#fff",fontSize:15,fontWeight:700,cursor:"pointer",fontFamily:"'Sora',sans-serif",display:"flex",alignItems:"center",gap:10,boxShadow:"0 4px 20px rgba(0,217,126,0.3)"}}>
-            {ta.imprimer}
-          </button>
-        </div>
-
-        {!selectedBoutique ? (
-          <div style={{textAlign:"center",padding:80,color:"#8891aa",fontSize:18}}>{ta.select_boutique}</div>
-        ) : (
-          <>
-            {/* STATS */}
-            <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:16,marginBottom:24}}>
-              {[
-                {label:ta.ca,value:fmt(stats.ca),color:"#f0f4ff",bg:"rgba(255,255,255,0.05)"},
-                {label:ta.encaisse,value:fmt(stats.enc),color:"#00d97e",bg:"rgba(0,217,126,0.1)"},
-                {label:ta.dettes,value:fmt(stats.det),color:"#ff6b6b",bg:"rgba(255,107,107,0.1)"},
-                {label:ta.nb_ventes,value:stats.nb,color:"#7b8cff",bg:"rgba(123,140,255,0.1)"},
-              ].map(c=>(
-                <div key={c.label} style={{background:c.bg,border:`1px solid ${c.color}22`,borderRadius:16,padding:20}}>
-                  <div style={{color:"#8891aa",fontSize:12,fontWeight:600,textTransform:"uppercase",marginBottom:8}}>{c.label}</div>
-                  <div style={{color:c.color,fontWeight:800,fontSize:22}}>{c.value}</div>
-                </div>
-              ))}
-            </div>
-
-            {/* MODES PAIEMENT */}
-            <div style={{background:"#1a1f2e",borderRadius:16,padding:20,marginBottom:24}}>
-              <div style={{color:"#f0f4ff",fontWeight:700,fontSize:17,marginBottom:16}}>{ta.modes}</div>
-              <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12}}>
-                {[
-                  {label:ta.cash,value:stats.cash,color:"#00d97e"},
-                  {label:ta.mobile,value:stats.mobile,color:"#7b8cff"},
-                  {label:ta.cheque,value:stats.cheque,color:"#ffd93d"},
-                  {label:ta.credit,value:stats.credit,color:"#ff6b6b"},
-                ].map(m=>(
-                  <div key={m.label} style={{background:"#252b3b",borderRadius:12,padding:16,textAlign:"center"}}>
-                    <div style={{color:"#8891aa",fontSize:13,marginBottom:8}}>{m.label}</div>
-                    <div style={{color:m.color,fontWeight:800,fontSize:18}}>{fmt(m.value)}</div>
-                    <div style={{color:"#8891aa",fontSize:11,marginTop:4}}>{stats.ca>0?Math.round((m.value/stats.ca)*100):0}% {ta.du_ca}</div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* GRAPHIQUE */}
-            <div style={{background:"#1a1f2e",borderRadius:16,padding:20,marginBottom:24}}>
-              <div style={{color:"#f0f4ff",fontWeight:700,fontSize:17,marginBottom:16}}>
-                {ta.evolution} {periodType==="annuel"?ta.mensuelle:periodType==="trimestriel"?ta.trimestrielle:""} {selectedYear}
-              </div>
-              <div style={{overflowX:"auto"}}>
-                <div style={{display:"flex",alignItems:"flex-end",gap:8,minWidth:600,height:200,padding:"0 10px"}}>
-                  {(periodType==="trimestriel"?dataTrimestrielle:dataMensuelle).map((d,i)=>{
-                    const maxCA=Math.max(...(periodType==="trimestriel"?dataTrimestrielle:dataMensuelle).map(x=>x.ca),1);
-                    const hCA=Math.round((d.ca/maxCA)*160);
-                    const hEnc=Math.round((d.encaisse/maxCA)*160);
-                    const isActive=(periodType==="mensuel"&&i===selectedMonth)||(periodType==="trimestriel"&&i===selectedQuarter);
-                    return(
-                      <div key={i} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:4}}>
-                        <div style={{fontSize:10,color:"#00d97e",fontWeight:700}}>{d.ca>0?`${Math.round(d.ca/1000)}k`:""}</div>
-                        <div style={{display:"flex",gap:2,alignItems:"flex-end",height:160}}>
-                          <div style={{width:14,height:hCA||2,background:isActive?"#00d97e":"#2a3a4a",borderRadius:"3px 3px 0 0"}}/>
-                          <div style={{width:14,height:hEnc||2,background:isActive?"rgba(0,217,126,0.4)":"rgba(123,140,255,0.4)",borderRadius:"3px 3px 0 0"}}/>
-                        </div>
-                        <div style={{fontSize:10,color:isActive?"#00d97e":"#8891aa",fontWeight:isActive?700:400}}>{d.mois||d.trimestre}</div>
-                        <div style={{fontSize:9,color:"#8891aa"}}>{d.nb}v</div>
-                      </div>
-                    );
-                  })}
-                </div>
-                <div style={{display:"flex",gap:20,marginTop:12,justifyContent:"center"}}>
-                  <div style={{display:"flex",alignItems:"center",gap:6}}><div style={{width:14,height:14,background:"#2a3a4a",borderRadius:3}}/><span style={{color:"#8891aa",fontSize:12}}>{ta.ca}</span></div>
-                  <div style={{display:"flex",alignItems:"center",gap:6}}><div style={{width:14,height:14,background:"rgba(123,140,255,0.4)",borderRadius:3}}/><span style={{color:"#8891aa",fontSize:12}}>{ta.encaisse}</span></div>
-                </div>
-              </div>
-            </div>
-
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:20,marginBottom:24}}>
-              {/* TOP PRODUITS */}
-              <div style={{background:"#1a1f2e",borderRadius:16,padding:20}}>
-                <div style={{color:"#f0f4ff",fontWeight:700,fontSize:17,marginBottom:16}}>{ta.top_produits}</div>
-                {topProduits.length===0
-                  ?<div style={{color:"#8891aa",fontSize:14,textAlign:"center",padding:20}}>{ta.aucune_vente}</div>
-                  :topProduits.map(([n,q],i)=>(
-                  <div key={n} style={{marginBottom:14}}>
-                    <div style={{display:"flex",justifyContent:"space-between",marginBottom:5}}>
-                      <span style={{color:"#f0f4ff",fontSize:14,fontWeight:600}}>#{i+1} {n}</span>
-                      <span style={{color:"#8891aa",fontSize:13}}>{q} {ta.unites}</span>
-                    </div>
-                    <div style={{height:6,background:"#252b3b",borderRadius:99}}>
-                      <div style={{height:"100%",width:`${(q/topProduits[0][1])*100}%`,background:["#00d97e","#7b8cff","#ffd93d","#ff9f43","#ff6b6b"][i],borderRadius:99}}/>
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              {/* TOP CLIENTS */}
-              <div style={{background:"#1a1f2e",borderRadius:16,padding:20}}>
-                <div style={{color:"#f0f4ff",fontWeight:700,fontSize:17,marginBottom:16}}>{ta.top_clients}</div>
-                {topClients.length===0
-                  ?<div style={{color:"#8891aa",fontSize:14,textAlign:"center",padding:20}}>{ta.aucun_client}</div>
-                  :topClients.map((c,i)=>(
-                  <div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 0",borderBottom:"1px solid rgba(255,255,255,0.05)"}}>
-                    <div style={{display:"flex",alignItems:"center",gap:10}}>
-                      <div style={{width:30,height:30,borderRadius:"50%",background:`${["#ffd93d","#8891aa","#ff9f43","#7b8cff","#00d97e"][i]}22`,display:"flex",alignItems:"center",justifyContent:"center",color:["#ffd93d","#8891aa","#ff9f43","#7b8cff","#00d97e"][i],fontWeight:800,fontSize:13}}>#{i+1}</div>
-                      <div>
-                        <div style={{color:"#f0f4ff",fontSize:14,fontWeight:600}}>{c.nom}</div>
-                        {c.tel&&<div style={{color:"#8891aa",fontSize:12}}>📞 {c.tel}</div>}
-                        <div style={{color:"#8891aa",fontSize:12}}>{c.nb} {ta.achats}</div>
-                      </div>
-                    </div>
-                    <div style={{color:"#00d97e",fontWeight:800,fontSize:15}}>{fmt(c.total)}</div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* VENDEURS */}
-            {vendeurs.length>0&&<div style={{background:"#1a1f2e",borderRadius:16,padding:20,marginBottom:24}}>
-              <div style={{color:"#f0f4ff",fontWeight:700,fontSize:17,marginBottom:16}}>{ta.perf_vendeurs}</div>
-              <table style={{width:"100%",borderCollapse:"collapse"}}>
-                <thead>
-                  <tr style={{borderBottom:"1px solid rgba(255,255,255,0.1)"}}>
-                    {[ta.vendeur,ta.nb_ventes_col,ta.ca,ta.part_ca].map(h=>(
-                      <th key={h} style={{color:"#8891aa",fontSize:13,fontWeight:600,textAlign:"left",padding:"8px 12px",textTransform:"uppercase"}}>{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {vendeurs.map((v,i)=>(
-                    <tr key={i} style={{borderBottom:"1px solid rgba(255,255,255,0.05)"}}>
-                      <td style={{color:"#f0f4ff",fontSize:14,fontWeight:600,padding:"12px"}}>{v.nom}</td>
-                      <td style={{color:"#7b8cff",fontSize:14,padding:"12px"}}>{v.nb}</td>
-                      <td style={{color:"#00d97e",fontSize:14,fontWeight:700,padding:"12px"}}>{fmt(v.ca)}</td>
-                      <td style={{padding:"12px"}}>
-                        <div style={{display:"flex",alignItems:"center",gap:8}}>
-                          <div style={{flex:1,height:6,background:"#252b3b",borderRadius:99}}>
-                            <div style={{height:"100%",width:`${stats.ca>0?Math.round((v.ca/stats.ca)*100):0}%`,background:"#00d97e",borderRadius:99}}/>
-                          </div>
-                          <span style={{color:"#8891aa",fontSize:12,minWidth:35}}>{stats.ca>0?Math.round((v.ca/stats.ca)*100):0}%</span>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>}
-
-            {/* DERNIÈRES VENTES */}
-            <div style={{background:"#1a1f2e",borderRadius:16,padding:20}}>
-              <div style={{color:"#f0f4ff",fontWeight:700,fontSize:17,marginBottom:16}}>{ta.dernieres_ventes} ({vp.length})</div>
-              {vp.length===0
-                ?<div style={{color:"#8891aa",fontSize:14,textAlign:"center",padding:20}}>{ta.aucune_vente}</div>
-                :<div style={{overflowX:"auto"}}>
-                  <table style={{width:"100%",borderCollapse:"collapse"}}>
-                    <thead>
-                      <tr style={{borderBottom:"1px solid rgba(255,255,255,0.1)"}}>
-                        {[ta.facture,ta.date,ta.produit,ta.client,ta.vendeur,ta.montant,ta.paye,ta.mode].map(h=>(
-                          <th key={h} style={{color:"#8891aa",fontSize:12,fontWeight:600,textAlign:"left",padding:"8px 12px",textTransform:"uppercase"}}>{h}</th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {vp.slice(-20).reverse().map((v,i)=>(
-                        <tr key={i} style={{borderBottom:"1px solid rgba(255,255,255,0.04)"}}>
-                          <td style={{color:"#7b8cff",fontSize:12,padding:"10px 12px"}}>{v.factureId}</td>
-                          <td style={{color:"#8891aa",fontSize:12,padding:"10px 12px"}}>{fmtDate(getDate(v))}</td>
-                          <td style={{color:"#f0f4ff",fontSize:13,fontWeight:600,padding:"10px 12px"}}>{v.produit}</td>
-                          <td style={{color:"#ff9f43",fontSize:12,padding:"10px 12px"}}>{v.clientNom||"-"}</td>
-                          <td style={{color:"#7b8cff",fontSize:12,padding:"10px 12px"}}>{v.vendeurNom||"-"}</td>
-                          <td style={{color:"#f0f4ff",fontSize:13,fontWeight:700,padding:"10px 12px"}}>{fmt(v.montant)}</td>
-                          <td style={{color:v.paye>=v.montant?"#00d97e":"#ff9f43",fontSize:13,fontWeight:700,padding:"10px 12px"}}>{fmt(v.paye)}</td>
-                          <td style={{padding:"10px 12px"}}>
-                            <span style={{background:v.mode==="cash"?"rgba(0,217,126,0.15)":v.mode==="mobile"?"rgba(123,140,255,0.15)":v.mode==="cheque"?"rgba(255,217,61,0.15)":"rgba(255,107,107,0.15)",color:v.mode==="cash"?"#00d97e":v.mode==="mobile"?"#7b8cff":v.mode==="cheque"?"#ffd93d":"#ff6b6b",borderRadius:6,padding:"3px 8px",fontSize:11,fontWeight:700}}>
-                              {v.mode==="cash"?ta.cash:v.mode==="mobile"?ta.mobile:v.mode==="cheque"?ta.cheque:ta.credit}
-                            </span>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              }
-            </div>
-          </>
-        )}
-      </div>
+          <Btn onClick={()=>setShowBilan(false)} full outlined color="#7b8cff">Fermer</Btn>
+        </Modal>
+      );})()}
     </div>
   );
 };
@@ -986,9 +616,9 @@ const AppBoutique = ({user,onLogout,t,langue,setLangue}) => {
 
   const saveClient=async(c)=>{const{id,...d}=c;if(isOnline){try{if(id&&id.length>5){await updateDoc(doc(db,"clients",id),{...c,boutiqueId:bid});const up=clients.map(x=>x.id===id?c:x);setClients(up);localStorage.setItem(KC,JSON.stringify(up));}else{const r=await addDoc(collection(db,"clients"),{...d,boutiqueId:bid,dette:c.dette||0,createdAt:serverTimestamp()});const nc={...c,id:r.id};const up=[...clients,nc];setClients(up);localStorage.setItem(KC,JSON.stringify(up));return r.id;}}catch(e){console.error(e);}}else{const nc={...c,id:id||Date.now().toString()};const up=id?clients.map(x=>x.id===id?nc:x):[...clients,nc];setClients(up);localStorage.setItem(KC,JSON.stringify(up));return nc.id;}};
 
-  const addVendeur=async()=>{if(!nv.nom||!nv.telephone||!nv.password)return;if(!lim.vendeurs){alert("⚠️ Les vendeurs sont disponibles en plan Pro.");setShowVendeurs(false);return;}try{const h=await hashPwd(nv.password);await addDoc(collection(db,"users"),{...nv,password:h,role:"vendeur",boutiqueId:bid,nomBoutique:boutique.nom,actif:true,createdAt:serverTimestamp()});setNv({nom:"",telephone:"",password:""});setShowVendeurs(false);alert("✅ Vendeur créé !");}catch(e){alert("Erreur: "+e.message);}};
+  const addVendeur=async()=>{if(!nv.nom||!nv.telephone||!nv.password)return;if(!lim.vendeurs){alert("⚠️ Les vendeurs sont disponibles en plan Pro.");setShowVendeurs(false);return;}try{const salt=genSalt();const h=await hashPwd(nv.password,salt);await addDoc(collection(db,"users"),{...nv,password:h,salt,role:"vendeur",boutiqueId:bid,nomBoutique:boutique.nom,actif:true,createdAt:serverTimestamp()});setNv({nom:"",telephone:"",password:""});setShowVendeurs(false);alert("✅ Vendeur créé !");}catch(e){alert("Erreur: "+e.message);}};
 
-  const changerMdp=async()=>{if(!oldPwd||!newPwd)return;setPwdMsg("");try{const snap=await getDocs(query(collection(db,"users"),where("telephone","==",user.telephone)));if(snap.empty){setPwdMsg("❌ Compte introuvable");return;}const ud=snap.docs[0].data();const oldHash=await hashPwd(oldPwd);if(ud.password!==oldHash&&ud.password!==oldPwd){setPwdMsg("❌ Ancien mot de passe incorrect");return;}const newHash=await hashPwd(newPwd);await updateDoc(doc(db,"users",snap.docs[0].id),{password:newHash});setPwdMsg("✅ Mot de passe changé avec succès !");setTimeout(()=>{setShowChangePwd(false);setOldPwd("");setNewPwd("");setPwdMsg("");},2000);}catch(e){setPwdMsg("❌ Erreur: "+e.message);}};
+  const changerMdp=async()=>{if(!oldPwd||!newPwd)return;setPwdMsg("");try{const snap=await getDocs(query(collection(db,"users"),where("telephone","==",user.telephone)));if(snap.empty){setPwdMsg("❌ Compte introuvable");return;}const ud=snap.docs[0].data();const r=await verifyPwd(oldPwd,ud);if(!r.ok){setPwdMsg("❌ Ancien mot de passe incorrect");return;}const newSalt=genSalt();const newHash=await hashPwd(newPwd,newSalt);await updateDoc(doc(db,"users",snap.docs[0].id),{password:newHash,salt:newSalt});setPwdMsg("✅ Mot de passe changé avec succès !");setTimeout(()=>{setShowChangePwd(false);setOldPwd("");setNewPwd("");setPwdMsg("");},2000);}catch(e){setPwdMsg("❌ Erreur: "+e.message);}};
 
   if(loading)return(<div style={{minHeight:"100vh",background:"#111520",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",fontFamily:"'Sora',sans-serif"}}><div style={{fontSize:40,marginBottom:16}}>{isOnline?"⏳":"📡"}</div><div style={{color:"#f0f4ff",fontWeight:700,fontSize:20,marginBottom:8}}>{isOnline?t.chargement:t.offline}</div>{!isOnline&&<div style={{color:"#8891aa",fontSize:16,textAlign:"center",padding:"0 20px"}}>{t.premiere_connexion}</div>}</div>);
 
@@ -1248,7 +878,6 @@ const VentesPage = ({produits,ventes,clients,saveVente,saveClient,t,isProp,bouti
   const tot=pan.reduce((s,x)=>s+x.prixVente*x.qte,0);
   const pay=mode==="credit"?0:mode==="cheque"||mode==="mobile"?tot:(mpay?Math.min(+mpay,tot):tot);
   const det=tot-pay;
-  const det=tot-pay;
   const mon=mpay&&mode==="cash"?Math.max(0,+mpay-tot):0;
 
   const reset=()=>{setOk(false);setPan([]);setStep(1);setSearch("");setMode("cash");setMpay("");setNumeroCheque("");setModeClient("anonyme");setSelectedClientId("");setNewClientData({nom:"",telephone:""});setCid("");setNc({nom:"",telephone:"",quartier:""});setLast(null);};
@@ -1256,27 +885,17 @@ const VentesPage = ({produits,ventes,clients,saveVente,saveClient,t,isProp,bouti
   const conf=async()=>{
     if(pan.length===0)return;
     if(lim&&lim.ventes!==Infinity){const dm=new Date();dm.setDate(1);dm.setHours(0,0,0,0);const vm=ventes.filter(v=>getDate(v)>=dm).length;if(vm>=lim.ventes){alert(`⚠️ Maximum ${lim.ventes} ventes/mois avec le plan Essai.`);return;}}
-   let cr=null,clientNom="",clientTel="";
-if(modeClient==="existant"&&selectedClientId){
-  cr=selectedClientId;
-  const cl=clients.find(x=>x.id===selectedClientId);
-  if(cl){
-    clientNom=cl.nom;clientTel=cl.telephone||"";
-    await saveClient({...cl,dette:(cl.dette||0)+det});
-  }
-}else if(modeClient==="nouveau"&&newClientData.nom){
-  const newId=await saveClient({...newClientData,quartier:"",dette:det});
-  cr=newId;clientNom=newClientData.nom;clientTel=newClientData.telephone||"";
-}else if(modeClient==="anonyme"&&mode==="credit"){
-  if(cid&&cid!=="nouveau"){
-    cr=cid;
-    const cl=clients.find(x=>x.id===cid);
-    if(cl){clientNom=cl.nom;clientTel=cl.telephone||"";await saveClient({...cl,dette:(cl.dette||0)+det});}
-  }else if(cid==="nouveau"&&nc.nom){
-    const newId=await saveClient({...nc,dette:det});
-    cr=newId;clientNom=nc.nom;clientTel=nc.telephone||"";
-  }
-}
+    let cr=null,clientNom="",clientTel="";
+    if(modeClient==="existant"&&selectedClientId){
+      cr=selectedClientId;const c=clients.find(x=>x.id===selectedClientId);
+      if(c){clientNom=c.nom;clientTel=c.telephone||"";if(det>0)await saveClient({...c,dette:(c.dette||0)+det});}
+    }else if(modeClient==="nouveau"&&newClientData.nom){
+      const newId=await saveClient({...newClientData,quartier:"",dette:det});cr=newId;clientNom=newClientData.nom;clientTel=newClientData.telephone||"";
+    }else if(mode==="credit"&&cid){
+      cr=cid;const c=clients.find(x=>x.id===cid);
+      if(c){clientNom=c.nom;clientTel=c.telephone||"";if(det>0)await saveClient({...c,dette:(c.dette||0)+det});}
+    }
+    const vd={produit:pan.map(x=>x.nom).join(", "),quantite:pan.reduce((s,x)=>s+x.qte,0),montant:tot,paye:pay,mode,numeroCheque:numeroCheque||"",clientId:cr||null,clientNom:clientNom||"",clientTel:clientTel||"",items:pan.map(x=>({id:x.id,nom:x.nom,qte:x.qte,prixVente:x.prixVente}))};
     const v=await saveVente(vd);
     if(v){setLast(v);setOk(true);}
   };
@@ -1325,12 +944,7 @@ if(modeClient==="existant"&&selectedClientId){
                   <div style={{flex:1,color:"#f0f4ff",fontSize:15,fontWeight:600}}>{x.nom}</div>
                   <div style={{display:"flex",alignItems:"center",gap:8}}>
                     <button onClick={()=>upd(x.id,x.qte-1)} style={{background:"#1a1f2e",border:"none",color:"#f0f4ff",width:30,height:30,borderRadius:8,cursor:"pointer",fontSize:16}}>−</button>
-                    <input
-  type="number"
-  value={x.qte}
-  onChange={e=>{const v=parseInt(e.target.value)||1;upd(x.id,v);}}
-  style={{background:"#1a1f2e",border:"1px solid #2d3448",color:"#f0f4ff",fontWeight:700,width:40,textAlign:"center",fontSize:16,borderRadius:8,padding:"3px 0",fontFamily:"'Sora',sans-serif",outline:"none"}}
-/>
+                    <span style={{color:"#f0f4ff",fontWeight:700,minWidth:20,textAlign:"center",fontSize:16}}>{x.qte}</span>
                     <button onClick={()=>upd(x.id,x.qte+1)} style={{background:"#1a1f2e",border:"none",color:"#f0f4ff",width:30,height:30,borderRadius:8,cursor:"pointer",fontSize:16}}>+</button>
                   </div>
                   <div style={{color:"#00d97e",fontWeight:700,fontSize:15}}>{fmt(x.prixVente*x.qte)}</div>
@@ -1418,9 +1032,7 @@ if(modeClient==="existant"&&selectedClientId){
 const DettesPage = ({clients,saveClient,ventes,t,boutique}) => {
   const [selected,setSelected]=useState(null); const [showPay,setShowPay]=useState(false); const [montant,setMontant]=useState("");
   const [showAdd,setShowAdd]=useState(false); const [nc,setNc]=useState({nom:"",telephone:"",quartier:""});
-  const pay=async()=>{if(!montant||!selected)return;const r=Math.min(+montant,selected.dette);const nouvelleDette = selected.dette - r;
-const up={...selected, dette:nouvelleDette, dateSolde: nouvelleDette<=0 ? new Date().toISOString() : null};
-await saveClient(up);setMontant("");setShowPay(false);};
+  const pay=async()=>{if(!montant||!selected)return;const r=Math.min(+montant,selected.dette);const up={...selected,dette:selected.dette-r};await saveClient(up);setSelected(up);setMontant("");setShowPay(false);};
   const addClient=async()=>{if(!nc.nom)return;await saveClient({...nc,dette:0});setNc({nom:"",telephone:"",quartier:""});setShowAdd(false);};
 
   if(selected){
@@ -1452,9 +1064,7 @@ await saveClient(up);setMontant("");setShowPay(false);};
             <div key={v.id} style={{background:"#1a1f2e",borderRadius:12,padding:"13px 15px",marginBottom:8}}>
               <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}><div style={{color:"#f0f4ff",fontSize:15,fontWeight:600}}>{v.produit}</div><div style={{color:"#f0f4ff",fontWeight:700,fontSize:15}}>{fmt(v.montant)}</div></div>
               {(v.vendeurNom||v.vendeurTel)&&<div style={{color:"#7b8cff",fontSize:13}}>🧑‍💼 {v.vendeurNom}{v.vendeurTel?` | ${v.vendeurTel}`:""}</div>}
-              <div style={{color:v.paye>=v.montant?"#00d97e":"#ff6b6b",fontSize:13,fontWeight:700}}>
-  {v.paye>=v.montant?"✓ Soldé":`${t.reste}: ${fmt(v.montant-v.paye)}`}
-            </div>
+              <div style={{display:"flex",justifyContent:"space-between"}}><div style={{color:"#8891aa",fontSize:13}}>#{v.factureId} | {fmtDate(getDate(v))}</div>{v.montant>v.paye&&<div style={{color:"#ff6b6b",fontSize:13}}>{t.reste}: {fmt(v.montant-v.paye)}</div>}</div>
             </div>
           ))}
         </div>
@@ -1477,12 +1087,7 @@ await saveClient(up);setMontant("");setShowPay(false);};
         <span style={{color:"#8891aa",fontSize:15}}>{t.totalDettes}</span>
         <span style={{color:"#ff6b6b",fontWeight:800,fontSize:16}}>{fmt(clients.reduce((s,c)=>s+(c.dette||0),0))}</span>
       </div>
-      {clients.filter(c=>{
-  if(c.dette>0) return true;
-  if(!c.dateSolde) return true;
-  const semaine = 7*24*60*60*1000;
-  return (new Date()-new Date(c.dateSolde)) < semaine;
-}).map(c=>(
+      {clients.map(c=>(
         <button key={c.id} onClick={()=>setSelected(c)} style={{background:"#1a1f2e",border:"none",borderRadius:12,padding:"14px 16px",cursor:"pointer",display:"flex",alignItems:"center",gap:12,textAlign:"left",width:"100%",marginBottom:10}}>
           <div style={{width:42,height:42,borderRadius:"50%",background:c.dette>0?"rgba(255,107,107,0.15)":"rgba(0,217,126,0.15)",display:"flex",alignItems:"center",justifyContent:"center"}}><Icon name="user" size={20} color={c.dette>0?"#ff6b6b":"#00d97e"}/></div>
           <div style={{flex:1}}><div style={{color:"#f0f4ff",fontWeight:700,fontSize:16}}>{c.nom}</div><div style={{color:"#8891aa",fontSize:14}}>📍 {c.quartier}{c.telephone?` | 📞 ${c.telephone}`:""}</div></div>
@@ -1602,6 +1207,6 @@ export default function App() {
   const handleLogin=(ud)=>{localStorage.setItem("lapia_user",JSON.stringify(ud));const cached=JSON.parse(localStorage.getItem("pg_known_users")||"[]");const exists=cached.find(u=>u.telephone===ud.telephone);if(!exists){cached.push(ud);localStorage.setItem("pg_known_users",JSON.stringify(cached));}setUser(ud);};
   const handleLogout=()=>{localStorage.removeItem("lapia_user");setUser(null);};
   if(!user)return<Login onLogin={handleLogin} t={t}/>;
-  if(user.role==="admin")return<AdminDashboardPC user={user} onLogout={handleLogout} t={t} langue={langue} setLangue={setLangue}/>;
+  if(user.role==="admin")return<AdminDashboard user={user} onLogout={handleLogout} t={t} langue={langue} setLangue={setLangue}/>;
   return<AppBoutique user={user} onLogout={handleLogout} t={t} langue={langue} setLangue={setLangue}/>;
 }
