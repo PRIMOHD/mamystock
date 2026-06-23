@@ -1,9 +1,65 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { db } from "./firebase";
 import { collection, doc, getDocs, addDoc, query, where, serverTimestamp, updateDoc } from "firebase/firestore";
 
 const WHATSAPP = "23562282320";
-const LEGACY_SALT = "primogest_salt_2026"; // ancien sel statique, conservé UNIQUEMENT pour vérifier les comptes créés avant la mise à jour sécurité
+const LEGACY_SALT = "primogest_salt_2026";
+
+// ── TRADUCTION AUTOMATIQUE via API Claude ──
+const traduireProduit = async (nom, categorie) => {
+  try {
+    const prompt = `Tu es un traducteur professionnel. Traduis ce nom de produit et cette catégorie de boutique africaine dans les 3 langues demandées.
+
+Nom du produit : "${nom}"
+Catégorie : "${categorie}"
+
+Réponds UNIQUEMENT avec ce JSON (rien d'autre) :
+{
+  "nom": {"fr": "...", "en": "...", "ar": "..."},
+  "categorie": {"fr": "...", "en": "...", "ar": "..."}
+}
+
+Règles :
+- Pour l'arabe, utilise l'arabe standard moderne
+- Garde les noms de marques et les quantités (25kg, 1L, etc.) tels quels
+- Si déjà en français, mets la même valeur en fr`;
+
+    const resp = await fetch("https://api.anthropic.com/v1/messages", {
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({
+        model:"claude-sonnet-4-6",
+        max_tokens:300,
+        messages:[{role:"user", content:prompt}]
+      })
+    });
+    const data = await resp.json();
+    const text = data.content?.[0]?.text||"";
+    const clean = text.replace(/```json|```/g,"").trim();
+    return JSON.parse(clean);
+  } catch(e) {
+    console.error("Traduction échouée:", e);
+    return { nom:{fr:nom,en:nom,ar:nom}, categorie:{fr:categorie,en:categorie,ar:categorie} };
+  }
+};
+
+// Helpers date péremption
+const moisAvantPeremption = (dateStr) => {
+  if(!dateStr) return null;
+  const diff = new Date(dateStr) - new Date();
+  return Math.floor(diff / (1000*60*60*24*30));
+};
+const statutPeremption = (dateStr) => {
+  const m = moisAvantPeremption(dateStr);
+  if(m === null) return null;
+  if(m < 0) return "expired";
+  if(m <= 1) return "critical";
+  if(m <= 4) return "warning";
+  return "ok";
+};
+const couleurPeremption = (statut) => ({
+  expired:"#ff4757", critical:"#ff6b6b", warning:"#ff9f43", ok:"#00d97e"
+})[statut]||"#8891aa";
 
 const genSalt = () => {
   const arr = new Uint8Array(16);
@@ -383,10 +439,26 @@ const Facture = ({vente,boutique,onClose,t}) => {
   );
 };
 
+const CATEGORIES_BOUTIQUE = [
+  "Alimentation générale","Épicerie","Supermarché","Pharmacie","Salon de coiffure",
+  "Restauration / Maquis","Électronique / Téléphonie","Vêtements / Textile",
+  "Quincaillerie","Cosmétique / Beauté","Boulangerie / Pâtisserie",
+  "Matériaux de construction","Librairie / Papeterie","Autre",
+];
+const CANAUX_BOUTIQUE = [
+  "Marché central","Marché de quartier","Rue commerçante","Centre commercial",
+  "Domicile / Résidence","Zone industrielle","Bord de route","Autre",
+];
+
 const Login = ({onLogin,t}) => {
   const [isInscription,setIsInscription]=useState(false);
   const [tel,setTel]=useState(""); const [pwd,setPwd]=useState("");
   const [nom,setNom]=useState(""); const [adr,setAdr]=useState("");
+  const [categorie,setCategorie]=useState("Alimentation générale");
+  const [canal,setCanal]=useState("Marché de quartier");
+  const [position,setPosition]=useState("");
+  const [dateNaissance,setDateNaissance]=useState("");
+  const [gpsStatus,setGpsStatus]=useState("idle"); // idle | loading | ok | error
   const [err,setErr]=useState(""); const [loading,setLoading]=useState(false);
   const [tentatives,setTentatives]=useState(0); const [bloque,setBloque]=useState(false);
 
@@ -407,7 +479,6 @@ const Login = ({onLogin,t}) => {
       const r=await verifyPwd(pwd,ud);
       if(!r.ok){handleEchec();return;}
       if(r.needsUpgrade){
-        // migration silencieuse : on régénère un sel aléatoire pour ce compte
         try{const newSalt=genSalt();const newHash=await hashPwd(pwd,newSalt);await updateDoc(doc(db,"users",docId),{password:newHash,salt:newSalt});ud.password=newHash;ud.salt=newSalt;}catch(e){}
       }
       onLogin(ud);
@@ -427,37 +498,99 @@ const Login = ({onLogin,t}) => {
     try {
       const snap=await getDocs(query(collection(db,"users"),where("telephone","==",tel)));
       if(!snap.empty){setErr("Ce numéro est déjà enregistré");setLoading(false);return;}
+      // GPS automatique
+      setGpsStatus("loading");
       let loc=null;
-      if(navigator.geolocation){try{const p=await new Promise((r,j)=>navigator.geolocation.getCurrentPosition(r,j,{timeout:5000}));loc={lat:p.coords.latitude,lng:p.coords.longitude};}catch(e){}}
+      if(navigator.geolocation){
+        try{
+          const p=await new Promise((r,j)=>navigator.geolocation.getCurrentPosition(r,j,{timeout:8000,enableHighAccuracy:true}));
+          loc={lat:p.coords.latitude,lng:p.coords.longitude,accuracy:Math.round(p.coords.accuracy)};
+          setGpsStatus("ok");
+        }catch(e){setGpsStatus("error");}
+      }else{setGpsStatus("error");}
       const salt=genSalt();
       const hashedPwd=await hashPwd(pwd,salt);
       const fin=new Date(Date.now()+30*24*60*60*1000).toISOString();
-      const ref=await addDoc(collection(db,"users"),{telephone:tel,password:hashedPwd,salt,nomBoutique:nom,adresse:adr,role:"proprietaire",localisation:loc,plan:"essai",essaiDebut:new Date().toISOString(),essaiFin:fin,createdAt:serverTimestamp(),actif:true});
-      onLogin({id:ref.id,telephone:tel,nomBoutique:nom,adresse:adr,role:"proprietaire",localisation:loc,plan:"essai",essaiFin:fin});
+      const ref=await addDoc(collection(db,"users"),{
+        telephone:tel,password:hashedPwd,salt,
+        nomBoutique:nom,adresse:adr,
+        categorie,canal,position,
+        dateNaissance:dateNaissance||"",
+        localisation:loc,
+        role:"proprietaire",
+        plan:"essai",essaiDebut:new Date().toISOString(),essaiFin:fin,
+        createdAt:serverTimestamp(),actif:true
+      });
+      onLogin({id:ref.id,telephone:tel,nomBoutique:nom,adresse:adr,categorie,canal,position,dateNaissance,localisation:loc,role:"proprietaire",plan:"essai",essaiFin:fin});
     } catch(e){setErr("Erreur: "+e.message);setLoading(false);}
   };
-
 
   const mdpOublie = () => {
     if(!tel){setErr("Entrez d'abord votre numéro de téléphone");return;}
     window.open(`https://wa.me/${WHATSAPP}?text=${encodeURIComponent(`Bonjour David 👋,\nJ'ai oublié mon mot de passe Lapia.\nMon numéro : ${tel}\nMerci de réinitialiser mon mot de passe.`)}`, "_blank");
   };
 
+  const LBL = {display:"block",color:"#8891aa",fontSize:12,fontWeight:600,marginBottom:5,textTransform:"uppercase",letterSpacing:"0.06em"};
+
   return (
     <div style={{minHeight:"100vh",background:"#111520",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:24,fontFamily:"'Sora',sans-serif"}}>
       <div style={{width:72,height:72,borderRadius:20,background:"linear-gradient(135deg,#00d97e,#00b360)",display:"flex",alignItems:"center",justifyContent:"center",fontWeight:800,color:"#fff",fontSize:30,marginBottom:20}}>L</div>
       <div style={{color:"#f0f4ff",fontWeight:800,fontSize:28,marginBottom:6}}>Lapia</div>
       <div style={{color:"#8891aa",fontSize:16,marginBottom:36}}>{t.connectezVous}</div>
-      <div style={{width:"100%",maxWidth:380}}>
+      <div style={{width:"100%",maxWidth:400}}>
         <input type="tel" value={tel} onChange={e=>setTel(e.target.value)} placeholder="+235 XX XX XX XX" style={{...IS,marginBottom:12}}/>
         <input type="password" value={pwd} onChange={e=>setPwd(e.target.value)} onKeyDown={e=>e.key==="Enter"&&(isInscription?inscrire():connect())} placeholder={t.motDePasse} style={{...IS,marginBottom:12}}/>
+
         {isInscription&&<>
-          <input value={nom} onChange={e=>setNom(e.target.value)} placeholder={`${t.nomBoutique} *`} style={{...IS,marginBottom:12}}/>
-          <input value={adr} onChange={e=>setAdr(e.target.value)} placeholder={t.adresse} style={{...IS,marginBottom:12}}/>
+          {/* Nom boutique */}
+          <div style={{marginBottom:12}}>
+            <label style={LBL}>Nom de la boutique *</label>
+            <input value={nom} onChange={e=>setNom(e.target.value)} placeholder="Ex: Épicerie Al Amin" style={IS}/>
+          </div>
+
+          {/* Catégorie */}
+          <div style={{marginBottom:12}}>
+            <label style={LBL}>Catégorie de la boutique *</label>
+            <select value={categorie} onChange={e=>setCategorie(e.target.value)} style={IS}>
+              {CATEGORIES_BOUTIQUE.map(c=><option key={c} value={c}>{c}</option>)}
+            </select>
+          </div>
+
+          {/* Canal + Position */}
+          <div style={{marginBottom:12}}>
+            <label style={LBL}>Emplacement *</label>
+            <select value={canal} onChange={e=>setCanal(e.target.value)} style={{...IS,marginBottom:8}}>
+              {CANAUX_BOUTIQUE.map(c=><option key={c} value={c}>{c}</option>)}
+            </select>
+            <input value={position} onChange={e=>setPosition(e.target.value)} placeholder="Précision : nom du marché, N° stand, quartier..." style={IS}/>
+          </div>
+
+          {/* Adresse texte */}
+          <div style={{marginBottom:12}}>
+            <label style={LBL}>Adresse / Quartier</label>
+            <input value={adr} onChange={e=>setAdr(e.target.value)} placeholder="Ex: Quartier Moursal, N'Djamena" style={IS}/>
+          </div>
+
+          {/* Date de naissance propriétaire */}
+          <div style={{marginBottom:12}}>
+            <label style={LBL}>Date de naissance du propriétaire</label>
+            <input type="date" value={dateNaissance} onChange={e=>setDateNaissance(e.target.value)} style={{...IS,colorScheme:"dark"}}/>
+            <div style={{color:"#8891aa",fontSize:11,marginTop:4}}>🎂 Pour vous souhaiter un joyeux anniversaire</div>
+          </div>
+
+          {/* GPS status */}
+          <div style={{background:"rgba(0,217,126,0.08)",border:"1px solid rgba(0,217,126,0.2)",borderRadius:10,padding:"10px 14px",marginBottom:12}}>
+            <div style={{fontSize:13,color:"#8891aa",marginBottom:4}}>
+              📍 <strong style={{color:"#00d97e"}}>Géolocalisation GPS</strong> — automatique à la création
+            </div>
+            <div style={{fontSize:12,color:"#8891aa"}}>Votre position exacte sera enregistrée pour apparaître sur la carte admin.</div>
+          </div>
+
           <div style={{background:"rgba(0,217,126,0.08)",border:"1px solid rgba(0,217,126,0.2)",borderRadius:10,padding:"10px 14px",marginBottom:12,fontSize:14,color:"#8891aa"}}>
             🎁 <strong style={{color:"#00d97e"}}>30 jours d'essai gratuit</strong> — Aucune carte bancaire requise
           </div>
         </>}
+
         {err&&<div style={{color:"#ff4757",fontSize:14,marginBottom:12,textAlign:"center",background:"rgba(255,71,87,0.1)",borderRadius:8,padding:"8px 12px"}}>{err}</div>}
         <button onClick={isInscription?inscrire:connect} disabled={loading||bloque}
           style={{width:"100%",background:loading||bloque?"#555":"linear-gradient(135deg,#00d97e,#00b360)",border:"none",borderRadius:12,color:"#fff",padding:16,fontSize:18,fontWeight:700,cursor:loading||bloque?"not-allowed":"pointer",fontFamily:"'Sora',sans-serif",marginBottom:12}}>
@@ -472,100 +605,647 @@ const Login = ({onLogin,t}) => {
   );
 };
 
-const AdminDashboard = ({user,onLogout,t,langue,setLangue}) => {
-  const [boutiques,setBoutiques]=useState([]);
-  const [ventes,setVentes]=useState([]);
-  const [loading,setLoading]=useState(true);
-  const [selected,setSelected]=useState(null);
-  const [showBilan,setShowBilan]=useState(false);
+// ── ADMIN DASHBOARD PC v2 — 3 langues FR/EN/AR ──
+// Remplace AdminDashboardPC dans App_Firebase.jsx
 
-  useEffect(()=>{(async()=>{
-    try{const [us,vs]=await Promise.all([getDocs(collection(db,"users")),getDocs(collection(db,"ventes"))]);
-    setBoutiques(us.docs.map(d=>({id:d.id,...d.data()})).filter(u=>u.role==="proprietaire"));
-    setVentes(vs.docs.map(d=>({id:d.id,...d.data()})));}catch(e){console.error(e);}
-    setLoading(false);
-  })();},[]);
+const AdminDashboard = ({user, onLogout, t, langue, setLangue}) => {
 
-  const totalCA=ventes.reduce((s,v)=>s+(v.montant||0),0);
-  const totalDettes=ventes.reduce((s,v)=>s+((v.montant||0)-(v.paye||0)),0);
-  const pm={};ventes.forEach(v=>{pm[v.produit]=(pm[v.produit]||0)+(v.quantite||0);});
-  const top=Object.entries(pm).sort((a,b)=>b[1]-a[1]).slice(0,5);
-  const bilan=(b)=>{const now=new Date(),tr=Math.floor(now.getMonth()/3)+1,debut=new Date(now.getFullYear(),(tr-1)*3,1);const vb=ventes.filter(v=>v.boutiqueId===b.id&&getDate(v)>=debut);return{tr,ca:vb.reduce((s,v)=>s+(v.montant||0),0),enc:vb.reduce((s,v)=>s+(v.paye||0),0),det:vb.reduce((s,v)=>s+((v.montant||0)-(v.paye||0)),0),nb:vb.length};};
-  const getBadge=(b)=>{const p=PLANS[b.plan||"essai"];if((b.plan==="essai"||!b.plan)&&b.essaiFin&&new Date()>new Date(b.essaiFin))return{label:"EXPIRÉ",color:"#ff4757"};return{label:p?.label||"ESSAI",color:p?.color||"#7b8cff"};};
+  // Traductions Admin
+  const TA = {
+    fr: {
+      titre:"Lapia Admin", superAdmin:"👑 SUPER ADMIN",
+      boutique:"Boutique", periode:"Période",
+      mensuel:"📅 Mensuel", trimestriel:"📊 Trimestriel", annuel:"📈 Annuel",
+      annee:"Année", mois_label:"Mois", trimestre_label:"Trimestre",
+      deconnexion:"Déconnexion", imprimer:"🖨️ Imprimer le bilan",
+      bilan:"Bilan", select_boutique:"← Sélectionne une boutique dans le menu",
+      ca:"Chiffre d'affaires", encaisse:"Encaissé", dettes:"Dettes en cours",
+      nb_ventes:"Nombre de ventes", modes:"💳 Modes de paiement",
+      cash:"💵 Cash", mobile:"📱 Mobile Money", cheque:"🏦 Chèque", credit:"📋 Crédit",
+      du_ca:"du CA", evolution:"📈 Évolution",
+      mensuelle:"mensuelle", trimestrielle:"trimestrielle",
+      top_produits:"🏆 Top Produits", top_clients:"👥 Meilleurs Clients",
+      perf_vendeurs:"🧑‍💼 Performance Vendeurs",
+      vendeur:"Vendeur", nb_ventes_col:"Nb Ventes", part_ca:"Part du CA",
+      dernieres_ventes:"📋 Dernières ventes de la période",
+      aucune_vente:"Aucune vente sur cette période",
+      aucun_client:"Aucun client enregistré",
+      facture:"Facture", date:"Date", produit:"Produit",
+      client:"Client", montant:"Montant", paye:"Payé", mode:"Mode",
+      unites:"unités", achats:"achat(s)",
+      mois: ["Janvier","Février","Mars","Avril","Mai","Juin","Juillet","Août","Septembre","Octobre","Novembre","Décembre"],
+      trimestres: ["T1 (Jan-Mar)","T2 (Avr-Jun)","T3 (Jul-Sep)","T4 (Oct-Déc)"],
+      genere_le:"Généré le", periode_label:"Période",
+      resume:"💰 Résumé Financier",
+    },
+    en: {
+      titre:"Lapia Admin", superAdmin:"👑 SUPER ADMIN",
+      boutique:"Store", periode:"Period",
+      mensuel:"📅 Monthly", trimestriel:"📊 Quarterly", annuel:"📈 Annual",
+      annee:"Year", mois_label:"Month", trimestre_label:"Quarter",
+      deconnexion:"Log out", imprimer:"🖨️ Print report",
+      bilan:"Report", select_boutique:"← Select a store from the menu",
+      ca:"Revenue", encaisse:"Collected", dettes:"Outstanding debts",
+      nb_ventes:"Number of sales", modes:"💳 Payment methods",
+      cash:"💵 Cash", mobile:"📱 Mobile Money", cheque:"🏦 Cheque", credit:"📋 Credit",
+      du_ca:"of revenue", evolution:"📈 Evolution",
+      mensuelle:"monthly", trimestrielle:"quarterly",
+      top_produits:"🏆 Top Products", top_clients:"👥 Best Customers",
+      perf_vendeurs:"🧑‍💼 Seller Performance",
+      vendeur:"Seller", nb_ventes_col:"Sales", part_ca:"Revenue share",
+      dernieres_ventes:"📋 Latest sales of the period",
+      aucune_vente:"No sales in this period",
+      aucun_client:"No registered customers",
+      facture:"Invoice", date:"Date", produit:"Product",
+      client:"Customer", montant:"Amount", paye:"Paid", mode:"Method",
+      unites:"units", achats:"purchase(s)",
+      mois: ["January","February","March","April","May","June","July","August","September","October","November","December"],
+      trimestres: ["Q1 (Jan-Mar)","Q2 (Apr-Jun)","Q3 (Jul-Sep)","Q4 (Oct-Dec)"],
+      genere_le:"Generated on", periode_label:"Period",
+      resume:"💰 Financial Summary",
+    },
+    ar: {
+      titre:"Lapia Admin", superAdmin:"👑 مدير عام",
+      boutique:"المتجر", periode:"الفترة",
+      mensuel:"📅 شهري", trimestriel:"📊 فصلي", annuel:"📈 سنوي",
+      annee:"السنة", mois_label:"الشهر", trimestre_label:"الفصل",
+      deconnexion:"تسجيل الخروج", imprimer:"🖨️ طباعة التقرير",
+      bilan:"تقرير", select_boutique:"← اختر متجراً من القائمة",
+      ca:"رقم الأعمال", encaisse:"المحصل", dettes:"الديون الجارية",
+      nb_ventes:"عدد المبيعات", modes:"💳 طرق الدفع",
+      cash:"💵 نقداً", mobile:"📱 موبايل موني", cheque:"🏦 شيك", credit:"📋 دين",
+      du_ca:"من رقم الأعمال", evolution:"📈 التطور",
+      mensuelle:"الشهري", trimestrielle:"الفصلي",
+      top_produits:"🏆 أفضل المنتجات", top_clients:"👥 أفضل العملاء",
+      perf_vendeurs:"🧑‍💼 أداء البائعين",
+      vendeur:"البائع", nb_ventes_col:"المبيعات", part_ca:"حصة رقم الأعمال",
+      dernieres_ventes:"📋 آخر مبيعات الفترة",
+      aucune_vente:"لا توجد مبيعات في هذه الفترة",
+      aucun_client:"لا يوجد عملاء مسجلون",
+      facture:"فاتورة", date:"التاريخ", produit:"المنتج",
+      client:"العميل", montant:"المبلغ", paye:"المدفوع", mode:"الطريقة",
+      unites:"وحدات", achats:"شراء",
+      mois: ["يناير","فبراير","مارس","أبريل","مايو","يونيو","يوليو","أغسطس","سبتمبر","أكتوبر","نوفمبر","ديسمبر"],
+      trimestres: ["ف1 (يناير-مارس)","ف2 (أبريل-يونيو)","ف3 (يوليو-سبتمبر)","ف4 (أكتوبر-ديسمبر)"],
+      genere_le:"تم الإنشاء في", periode_label:"الفترة",
+      resume:"💰 ملخص مالي",
+    }
+  };
 
-  if(loading)return<div style={{color:"#f0f4ff",textAlign:"center",padding:40,minHeight:"100vh",background:"#111520",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'Sora',sans-serif",fontSize:18}}>{t.chargement}</div>;
+  const ta = TA[langue] || TA.fr;
+  const isRTL = langue === "ar";
 
-  return(
-    <div style={{maxWidth:600,margin:"0 auto",minHeight:"100vh",background:"#111520",fontFamily:"'Sora',sans-serif",paddingBottom:40}}>
-      <div style={{background:"linear-gradient(135deg,#1a1f2e,#252b3b)",padding:"16px 20px",borderBottom:"1px solid rgba(0,217,126,0.2)",display:"flex",alignItems:"center",justifyContent:"space-between",position:"sticky",top:0,zIndex:100}}>
-        <div style={{display:"flex",alignItems:"center",gap:10}}>
-          <div style={{width:40,height:40,borderRadius:10,background:"linear-gradient(135deg,#00d97e,#00b360)",display:"flex",alignItems:"center",justifyContent:"center",fontWeight:800,color:"#fff",fontSize:16}}>L</div>
-          <div><div style={{color:"#f0f4ff",fontWeight:800,fontSize:17}}>Admin Lapia</div><div style={{color:"#00d97e",fontSize:12,fontWeight:700}}>👑 SUPER ADMIN</div></div>
+  const [boutiques, setBoutiques] = useState([]);
+  const [ventes, setVentes] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [selectedBoutique, setSelectedBoutique] = useState(null);
+  const [periodType, setPeriodType] = useState("mensuel");
+  const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth());
+  const [selectedQuarter, setSelectedQuarter] = useState(Math.floor(new Date().getMonth()/3));
+  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
+  const [activeTab, setActiveTab] = useState("bilans"); // "bilans" | "carte"
+  const [mapReady, setMapReady] = useState(false);
+  const mapRef = useRef(null);
+  const mapInstanceRef = useRef(null);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const [us, vs] = await Promise.all([
+          getDocs(collection(db, "users")),
+          getDocs(collection(db, "ventes"))
+        ]);
+        const b = us.docs.map(d=>({id:d.id,...d.data()})).filter(u=>u.role==="proprietaire");
+        const v = vs.docs.map(d=>({id:d.id,...d.data()}));
+        setBoutiques(b);
+        setVentes(v);
+        if (b.length > 0) setSelectedBoutique(b[0]);
+      } catch(e) { console.error(e); }
+      setLoading(false);
+    })();
+  }, []);
+
+  // Anniversaires du jour
+  const today = new Date();
+  const todayMMDD = `${String(today.getMonth()+1).padStart(2,"0")}-${String(today.getDate()).padStart(2,"0")}`;
+  const anniversaires = boutiques.filter(b => {
+    if(!b.dateNaissance) return false;
+    const parts = b.dateNaissance.split("-");
+    if(parts.length < 3) return false;
+    return `${parts[1]}-${parts[2]}` === todayMMDD;
+  });
+
+  // Init carte Leaflet
+  useEffect(() => {
+    if(activeTab !== "carte" || !mapRef.current || mapInstanceRef.current) return;
+    const L = window.L;
+    if(!L) return;
+    const map = L.map(mapRef.current).setView([12.1, 15.0], 6);
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      attribution:"© OpenStreetMap"
+    }).addTo(map);
+    boutiques.forEach(b => {
+      if(!b.localisation?.lat) return;
+      const col = b.plan==="pro"?"#00d97e":b.plan==="business"?"#ffd93d":"#7b8cff";
+      const marker = L.circleMarker([b.localisation.lat, b.localisation.lng], {
+        radius:8, fillColor:col, color:"#fff", weight:2, fillOpacity:0.9
+      }).addTo(map);
+      marker.bindPopup(`
+        <div style="font-family:sans-serif;min-width:160px">
+          <strong style="font-size:14px">${b.nomBoutique}</strong><br/>
+          <span style="color:#666;font-size:12px">${b.categorie||"Boutique"}</span><br/>
+          <span style="font-size:12px">📞 ${b.telephone}</span><br/>
+          <span style="font-size:12px">📍 ${b.canal||""} ${b.position?"— "+b.position:""}</span><br/>
+          <span style="background:${col};color:#fff;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:bold">${(b.plan||"essai").toUpperCase()}</span>
         </div>
-        <div style={{display:"flex",gap:6,alignItems:"center"}}>
-          {["fr","en","ar"].map(l=><button key={l} onClick={()=>{setLangue(l);localStorage.setItem("lapia_langue",l);}} style={{background:langue===l?"#00d97e":"#252b3b",border:"none",borderRadius:6,padding:"4px 10px",color:langue===l?"#fff":"#8891aa",fontSize:12,fontWeight:700,cursor:"pointer"}}>{l.toUpperCase()}</button>)}
-          <button onClick={onLogout} style={{background:"#252b3b",border:"none",borderRadius:10,padding:8,cursor:"pointer",display:"flex",marginLeft:4}}><Icon name="logout" size={18} color="#ff6b6b"/></button>
-        </div>
-      </div>
-      <div style={{padding:"20px 16px"}}>
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:24}}>
-          {[{label:t.boutiques,value:boutiques.length,color:"#7b8cff",icon:"store"},{label:t.transactions_globales,value:ventes.length,color:"#ffd93d",icon:"chart"},{label:"Chiffre d'affaires",value:fmt(totalCA),color:"#00d97e",icon:"money"},{label:"Dettes totales",value:fmt(totalDettes),color:"#ff6b6b",icon:"dette"}].map(c=>(
-            <div key={c.label} style={{background:"#1a1f2e",borderRadius:16,padding:16,border:`1px solid ${c.color}22`}}>
-              <Icon name={c.icon} size={20} color={c.color}/>
-              <div style={{color:c.color,fontWeight:800,fontSize:17,marginTop:8}}>{c.value}</div>
-              <div style={{color:"#8891aa",fontSize:13}}>{c.label}</div>
+      `);
+    });
+    mapInstanceRef.current = map;
+    setMapReady(true);
+  }, [activeTab, boutiques]);
+
+  const getVentesBoutique = () => selectedBoutique ? ventes.filter(v => v.boutiqueId === selectedBoutique.id) : [];
+
+  const getVentesPeriode = () => {
+    const vb = getVentesBoutique();
+    if (periodType === "mensuel") {
+      return vb.filter(v => { const d=getDate(v); return d.getMonth()===selectedMonth && d.getFullYear()===selectedYear; });
+    } else if (periodType === "trimestriel") {
+      const debut = selectedQuarter * 3;
+      return vb.filter(v => { const d=getDate(v); return d.getMonth()>=debut && d.getMonth()<debut+3 && d.getFullYear()===selectedYear; });
+    } else {
+      return vb.filter(v => getDate(v).getFullYear()===selectedYear);
+    }
+  };
+
+  const calcStats = (vs) => ({
+    ca: vs.reduce((s,v)=>s+(v.montant||0),0),
+    enc: vs.reduce((s,v)=>s+(v.paye||0),0),
+    det: vs.reduce((s,v)=>s+((v.montant||0)-(v.paye||0)),0),
+    nb: vs.length,
+    cash: vs.filter(v=>v.mode==="cash").reduce((s,v)=>s+(v.paye||0),0),
+    mobile: vs.filter(v=>v.mode==="mobile").reduce((s,v)=>s+(v.paye||0),0),
+    cheque: vs.filter(v=>v.mode==="cheque").reduce((s,v)=>s+(v.paye||0),0),
+    credit: vs.filter(v=>v.mode==="credit").reduce((s,v)=>s+(v.montant||0),0),
+  });
+
+  const getDataMensuelle = () => {
+    const vb = getVentesBoutique();
+    return ta.mois.map((m, i) => {
+      const vm = vb.filter(v => { const d=getDate(v); return d.getMonth()===i && d.getFullYear()===selectedYear; });
+      return { mois:m.substring(0,3), ca:vm.reduce((s,v)=>s+(v.montant||0),0), encaisse:vm.reduce((s,v)=>s+(v.paye||0),0), nb:vm.length };
+    });
+  };
+
+  const getDataTrimestrielle = () => {
+    const vb = getVentesBoutique();
+    return [0,1,2,3].map(i => {
+      const debut = i * 3;
+      const vm = vb.filter(v => { const d=getDate(v); return d.getMonth()>=debut && d.getMonth()<debut+3 && d.getFullYear()===selectedYear; });
+      return { trimestre:`T${i+1}`, ca:vm.reduce((s,v)=>s+(v.montant||0),0), encaisse:vm.reduce((s,v)=>s+(v.paye||0),0), nb:vm.length };
+    });
+  };
+
+  const vp = getVentesPeriode();
+  const stats = calcStats(vp);
+  const dataMensuelle = getDataMensuelle();
+  const dataTrimestrielle = getDataTrimestrielle();
+
+  const pm = {}; vp.forEach(v=>{ pm[v.produit]=(pm[v.produit]||0)+(v.quantite||0); });
+  const topProduits = Object.entries(pm).sort((a,b)=>b[1]-a[1]).slice(0,5);
+
+  const cm = {}; vp.forEach(v=>{ if(v.clientNom){ const k=v.clientId||v.clientNom; if(!cm[k])cm[k]={nom:v.clientNom,tel:v.clientTel||"",total:0,nb:0}; cm[k].total+=v.montant||0; cm[k].nb+=1; } });
+  const topClients = Object.values(cm).sort((a,b)=>b.total-a.total).slice(0,5);
+
+  const vm2 = {}; vp.forEach(v=>{ if(v.vendeurId){ if(!vm2[v.vendeurId])vm2[v.vendeurId]={nom:v.vendeurNom||"Vendeur",nb:0,ca:0}; vm2[v.vendeurId].nb+=1; vm2[v.vendeurId].ca+=v.montant||0; } });
+  const vendeurs = Object.values(vm2).sort((a,b)=>b.ca-a.ca);
+
+  const getPeriodeLabel = () => {
+    if(periodType==="mensuel") return `${ta.mois[selectedMonth]} ${selectedYear}`;
+    if(periodType==="trimestriel") return `${ta.trimestres[selectedQuarter]} ${selectedYear}`;
+    return `${ta.annee} ${selectedYear}`;
+  };
+
+  const imprimer = () => {
+    const w = window.open("","_blank");
+    const boutNom = selectedBoutique?.nomBoutique || "Boutique";
+    const periode = getPeriodeLabel();
+    w.document.write(`<!DOCTYPE html><html dir="${isRTL?'rtl':'ltr'}"><head><title>${ta.bilan} ${boutNom} — ${periode}</title>
+    <style>
+      body{font-family:Arial,sans-serif;padding:40px;color:#333;max-width:800px;margin:0 auto;direction:${isRTL?'rtl':'ltr'}}
+      h1{color:#00a85f;border-bottom:3px solid #00a85f;padding-bottom:10px}
+      h2{color:#555;margin-top:30px;border-left:4px solid #00a85f;padding-left:10px}
+      .grid{display:grid;grid-template-columns:repeat(4,1fr);gap:15px;margin:20px 0}
+      .card{background:#f9f9f9;border:1px solid #ddd;border-radius:8px;padding:15px;text-align:center}
+      .card-val{font-size:22px;font-weight:800;color:#00a85f;margin:8px 0}
+      .card-label{font-size:12px;color:#888;text-transform:uppercase}
+      table{width:100%;border-collapse:collapse;margin-top:15px}
+      th{background:#00a85f;color:white;padding:10px;text-align:left;font-size:13px}
+      td{padding:10px;border-bottom:1px solid #eee;font-size:13px}
+      tr:nth-child(even){background:#f9f9f9}
+      .footer{margin-top:40px;text-align:center;color:#999;font-size:12px;border-top:1px solid #eee;padding-top:20px}
+    </style></head><body>
+    <h1>📊 ${ta.bilan} — ${boutNom}</h1>
+    <p style="color:#666">${ta.periode_label} : <strong>${periode}</strong> | ${ta.genere_le} : <strong>${new Date().toLocaleDateString("fr-FR")}</strong></p>
+    <h2>${ta.resume}</h2>
+    <div class="grid">
+      <div class="card"><div class="card-label">${ta.ca}</div><div class="card-val">${fmt(stats.ca)}</div></div>
+      <div class="card"><div class="card-label">${ta.encaisse}</div><div class="card-val" style="color:#00a85f">${fmt(stats.enc)}</div></div>
+      <div class="card"><div class="card-label">${ta.dettes}</div><div class="card-val" style="color:#e53935">${fmt(stats.det)}</div></div>
+      <div class="card"><div class="card-label">${ta.nb_ventes}</div><div class="card-val" style="color:#1565c0">${stats.nb}</div></div>
+    </div>
+    <h2>${ta.modes}</h2>
+    <div class="grid">
+      <div class="card"><div class="card-label">${ta.cash}</div><div class="card-val">${fmt(stats.cash)}</div></div>
+      <div class="card"><div class="card-label">${ta.mobile}</div><div class="card-val">${fmt(stats.mobile)}</div></div>
+      <div class="card"><div class="card-label">${ta.cheque}</div><div class="card-val">${fmt(stats.cheque)}</div></div>
+      <div class="card"><div class="card-label">${ta.credit}</div><div class="card-val" style="color:#e53935">${fmt(stats.credit)}</div></div>
+    </div>
+    ${topProduits.length>0?`<h2>${ta.top_produits}</h2><table><tr><th>#</th><th>${ta.produit}</th><th>${ta.unites}</th></tr>${topProduits.map(([n,q],i)=>`<tr><td>${i+1}</td><td>${n}</td><td>${q}</td></tr>`).join("")}</table>`:""}
+    ${topClients.length>0?`<h2>${ta.top_clients}</h2><table><tr><th>#</th><th>${ta.client}</th><th>📞</th><th>${ta.achats}</th><th>${ta.montant}</th></tr>${topClients.map((c,i)=>`<tr><td>${i+1}</td><td>${c.nom}</td><td>${c.tel||"-"}</td><td>${c.nb}</td><td>${fmt(c.total)}</td></tr>`).join("")}</table>`:""}
+    ${vendeurs.length>0?`<h2>${ta.perf_vendeurs}</h2><table><tr><th>${ta.vendeur}</th><th>${ta.nb_ventes_col}</th><th>${ta.ca}</th></tr>${vendeurs.map(v=>`<tr><td>${v.nom}</td><td>${v.nb}</td><td>${fmt(v.ca)}</td></tr>`).join("")}</table>`:""}
+    <div class="footer">Lapia — lapiagest.vercel.app</div>
+    </body></html>`);
+    w.document.close(); w.print();
+  };
+
+  if(loading) return <div style={{minHeight:"100vh",background:"#111520",display:"flex",alignItems:"center",justifyContent:"center",color:"#f0f4ff",fontSize:18,fontFamily:"'Sora',sans-serif"}}>{t.chargement}</div>;
+
+  const SIDEBAR_W = 260;
+
+  return (
+    <div style={{minHeight:"100vh",background:"#111520",fontFamily:"'Sora',sans-serif",display:"flex",direction:isRTL?"rtl":"ltr"}}>
+
+      {/* SIDEBAR */}
+      <div style={{width:SIDEBAR_W,background:"#1a1f2e",borderRight:isRTL?"none":"1px solid rgba(255,255,255,0.06)",borderLeft:isRTL?"1px solid rgba(255,255,255,0.06)":"none",display:"flex",flexDirection:"column",position:"fixed",[isRTL?"right":"left"]:0,top:0,bottom:0,padding:"20px 0",zIndex:100}}>
+        <div style={{padding:"0 20px 24px",borderBottom:"1px solid rgba(255,255,255,0.06)"}}>
+          <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:16}}>
+            <div style={{width:42,height:42,borderRadius:12,background:"linear-gradient(135deg,#00d97e,#00b360)",display:"flex",alignItems:"center",justifyContent:"center",fontWeight:800,color:"#fff",fontSize:18}}>L</div>
+            <div>
+              <div style={{color:"#f0f4ff",fontWeight:800,fontSize:17}}>{ta.titre}</div>
+              <div style={{color:"#00d97e",fontSize:11,fontWeight:700}}>{ta.superAdmin}</div>
             </div>
-          ))}
-        </div>
-        {top.length>0&&<div style={{background:"#1a1f2e",borderRadius:16,padding:16,marginBottom:20}}>
-          <div style={{color:"#f0f4ff",fontWeight:700,fontSize:17,marginBottom:14}}>{t.topProduits}</div>
-          {top.map(([n,q],i)=>(
-            <div key={n} style={{marginBottom:10}}>
-              <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}><span style={{color:"#f0f4ff",fontSize:15,fontWeight:600}}>#{i+1} {n}</span><span style={{color:"#8891aa",fontSize:14}}>{q} unités</span></div>
-              <div style={{height:5,background:"#252b3b",borderRadius:99}}><div style={{height:"100%",width:`${(q/top[0][1])*100}%`,background:["#00d97e","#7b8cff","#ffd93d","#ff9f43","#ff6b6b"][i],borderRadius:99}}/></div>
-            </div>
-          ))}
-        </div>}
-        <div style={{color:"#f0f4ff",fontWeight:700,fontSize:18,marginBottom:12}}>🏪 {t.boutiques} ({boutiques.length})</div>
-        {boutiques.map(b=>{
-          const vb=ventes.filter(v=>v.boutiqueId===b.id);
-          const ca=vb.reduce((s,v)=>s+(v.montant||0),0);
-          const bg=getBadge(b);
-          const jr=b.essaiFin?Math.max(0,Math.ceil((new Date(b.essaiFin)-new Date())/(1000*60*60*24))):0;
-          return(<div key={b.id} style={{background:"#1a1f2e",borderRadius:14,padding:16,marginBottom:12,border:"1px solid rgba(255,255,255,0.05)"}}>
-            <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:10}}>
-              <div>
-                <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4}}>
-                  <span style={{color:"#f0f4ff",fontWeight:700,fontSize:16}}>{b.nomBoutique}</span>
-                  <span style={{background:`${bg.color}22`,border:`1px solid ${bg.color}44`,color:bg.color,borderRadius:6,padding:"2px 8px",fontSize:12,fontWeight:700}}>{bg.label}</span>
-                </div>
-                <div style={{color:"#8891aa",fontSize:14}}>📞 {b.telephone}</div>
-                {b.adresse&&<div style={{color:"#8891aa",fontSize:14}}>📍 {b.adresse}</div>}
-                {(b.plan==="essai"||!b.plan)&&jr>0&&<div style={{color:"#ff9f43",fontSize:13}}>⏰ {jr} jours restants</div>}
-                {(b.plan==="essai"||!b.plan)&&jr===0&&b.essaiFin&&<div style={{color:"#ff4757",fontSize:13}}>🔴 Essai expiré</div>}
-              </div>
-              <div style={{textAlign:"right"}}><div style={{color:"#00d97e",fontWeight:800,fontSize:16}}>{fmt(ca)}</div><div style={{color:"#8891aa",fontSize:13}}>{vb.length} ventes</div></div>
-            </div>
-            <button onClick={()=>{setSelected(b);setShowBilan(true);}} style={{width:"100%",background:"rgba(123,140,255,0.15)",border:"1px solid rgba(123,140,255,0.3)",borderRadius:10,padding:"10px 14px",color:"#7b8cff",fontSize:14,fontWeight:700,cursor:"pointer",fontFamily:"'Sora',sans-serif"}}>
-              📊 {t.bilan_trimestriel}
-            </button>
-          </div>);
-        })}
-        {boutiques.length===0&&<div style={{color:"#8891aa",textAlign:"center",padding:40,fontSize:16}}>Aucune boutique enregistrée</div>}
-      </div>
-      {showBilan&&selected&&(()=>{const b=bilan(selected);return(
-        <Modal titre={`📊 Bilan T${b.tr} — ${selected.nomBoutique}`} onClose={()=>setShowBilan(false)}>
-          <div style={{background:"#252b3b",borderRadius:14,padding:20,marginBottom:16}}>
-            <div style={{color:"#8891aa",fontSize:15,marginBottom:16}}>Trimestre {b.tr} — {new Date().getFullYear()}</div>
-            {[{l:"Chiffre d'affaires",v:fmt(b.ca),c:"#f0f4ff"},{l:"Encaissé",v:fmt(b.enc),c:"#00d97e"},{l:"Dettes en cours",v:fmt(b.det),c:"#ff6b6b"},{l:"Nb ventes",v:b.nb,c:"#ffd93d"}].map(x=>(
-              <div key={x.l} style={{display:"flex",justifyContent:"space-between",padding:"12px 0",borderBottom:"1px solid rgba(255,255,255,0.05)"}}>
-                <span style={{color:"#8891aa",fontSize:16}}>{x.l}</span><span style={{color:x.c,fontWeight:700,fontSize:16}}>{x.v}</span>
-              </div>
-            ))}
           </div>
-          <Btn onClick={()=>setShowBilan(false)} full outlined color="#7b8cff">Fermer</Btn>
-        </Modal>
-      );})()}
+          <div style={{display:"flex",gap:4}}>
+            {["fr","en","ar"].map(l=><button key={l} onClick={()=>{setLangue(l);localStorage.setItem("primogest_langue",l);}} style={{background:langue===l?"#00d97e":"#252b3b",border:"none",borderRadius:4,padding:"3px 8px",color:langue===l?"#fff":"#8891aa",fontSize:11,fontWeight:700,cursor:"pointer"}}>{l.toUpperCase()}</button>)}
+          </div>
+        </div>
+
+        <div style={{padding:"16px 20px",borderBottom:"1px solid rgba(255,255,255,0.06)"}}>
+          <div style={{color:"#8891aa",fontSize:11,fontWeight:600,textTransform:"uppercase",marginBottom:10}}>{ta.boutique}</div>
+          {boutiques.map(b=>(
+            <button key={b.id} onClick={()=>setSelectedBoutique(b)}
+              style={{display:"flex",alignItems:"center",gap:10,padding:"10px 12px",borderRadius:10,border:"none",background:selectedBoutique?.id===b.id?"rgba(0,217,126,0.1)":"transparent",cursor:"pointer",width:"100%",textAlign:"left",marginBottom:4}}>
+              <div style={{width:8,height:8,borderRadius:"50%",background:selectedBoutique?.id===b.id?"#00d97e":"#555",flexShrink:0}}/>
+              <div>
+                <div style={{color:selectedBoutique?.id===b.id?"#00d97e":"#f0f4ff",fontWeight:600,fontSize:13}}>{b.nomBoutique}</div>
+                <div style={{color:"#8891aa",fontSize:11}}>📞 {b.telephone}</div>
+              </div>
+            </button>
+          ))}
+        </div>
+
+        <div style={{padding:"16px 20px",flex:1,overflowY:"auto"}}>
+          <div style={{color:"#8891aa",fontSize:11,fontWeight:600,textTransform:"uppercase",marginBottom:10}}>{ta.periode}</div>
+          {[{val:"mensuel",label:ta.mensuel},{val:"trimestriel",label:ta.trimestriel},{val:"annuel",label:ta.annuel}].map(p=>(
+            <button key={p.val} onClick={()=>setPeriodType(p.val)}
+              style={{display:"flex",alignItems:"center",gap:10,padding:"10px 12px",borderRadius:10,border:"none",background:periodType===p.val?"rgba(123,140,255,0.1)":"transparent",cursor:"pointer",width:"100%",textAlign:"left",marginBottom:4}}>
+              <span style={{color:periodType===p.val?"#7b8cff":"#8891aa",fontWeight:600,fontSize:14,fontFamily:"'Sora',sans-serif"}}>{p.label}</span>
+            </button>
+          ))}
+          <div style={{marginTop:16}}>
+            <div style={{color:"#8891aa",fontSize:11,fontWeight:600,textTransform:"uppercase",marginBottom:8}}>{ta.annee}</div>
+            <select value={selectedYear} onChange={e=>setSelectedYear(+e.target.value)} style={{...IS,fontSize:14}}>
+              {[2024,2025,2026,2027].map(y=><option key={y} value={y}>{y}</option>)}
+            </select>
+          </div>
+          {periodType==="mensuel"&&<div style={{marginTop:12}}>
+            <div style={{color:"#8891aa",fontSize:11,fontWeight:600,textTransform:"uppercase",marginBottom:8}}>{ta.mois_label}</div>
+            <select value={selectedMonth} onChange={e=>setSelectedMonth(+e.target.value)} style={{...IS,fontSize:14}}>
+              {ta.mois.map((m,i)=><option key={i} value={i}>{m}</option>)}
+            </select>
+          </div>}
+          {periodType==="trimestriel"&&<div style={{marginTop:12}}>
+            <div style={{color:"#8891aa",fontSize:11,fontWeight:600,textTransform:"uppercase",marginBottom:8}}>{ta.trimestre_label}</div>
+            <select value={selectedQuarter} onChange={e=>setSelectedQuarter(+e.target.value)} style={{...IS,fontSize:14}}>
+              {ta.trimestres.map((tr,i)=><option key={i} value={i}>{tr}</option>)}
+            </select>
+          </div>}
+        </div>
+
+        <div style={{padding:"16px 20px",borderTop:"1px solid rgba(255,255,255,0.06)"}}>
+          <button onClick={onLogout} style={{display:"flex",alignItems:"center",justifyContent:"center",gap:8,background:"rgba(255,107,107,0.1)",border:"1px solid rgba(255,107,107,0.2)",borderRadius:8,padding:"10px",color:"#ff6b6b",fontSize:13,fontWeight:700,cursor:"pointer",fontFamily:"'Sora',sans-serif",width:"100%"}}>
+            <Icon name="logout" size={16} color="#ff6b6b"/> {ta.deconnexion}
+          </button>
+        </div>
+      </div>
+
+      {/* CONTENU */}
+      <div style={{marginLeft:isRTL?0:SIDEBAR_W,marginRight:isRTL?SIDEBAR_W:0,flex:1,padding:"30px",overflowY:"auto"}}>
+
+        {/* BANNIÈRE ANNIVERSAIRES DU JOUR */}
+        {anniversaires.length>0&&(
+          <div style={{background:"rgba(255,159,67,0.12)",border:"1px solid rgba(255,159,67,0.4)",borderRadius:14,padding:"14px 20px",marginBottom:20,display:"flex",alignItems:"center",gap:14}}>
+            <div style={{fontSize:28}}>🎂</div>
+            <div>
+              <div style={{color:"#ff9f43",fontWeight:700,fontSize:15,marginBottom:4}}>
+                {anniversaires.length===1?"Anniversaire aujourd'hui !":"Anniversaires aujourd'hui !"}
+              </div>
+              {anniversaires.map(b=>(
+                <div key={b.id} style={{color:"#f0f4ff",fontSize:13,marginBottom:2}}>
+                  🎁 <strong>{b.nomBoutique}</strong> — {b.telephone}
+                  {b.dateNaissance&&<span style={{color:"#8891aa",marginLeft:8}}>({new Date().getFullYear()-parseInt(b.dateNaissance.split("-")[0])} ans)</span>}
+                </div>
+              ))}
+              <a href={`https://wa.me/${WHATSAPP}?text=${encodeURIComponent(`🎂 Rappel Lapia : ${anniversaires.map(b=>b.nomBoutique).join(", ")} fête${anniversaires.length>1?"nt":""}  son anniversaire aujourd'hui ! N'oublie pas de lui envoyer un message 🎁`)}`}
+                target="_blank"
+                style={{display:"inline-flex",alignItems:"center",gap:6,marginTop:8,background:"#25D366",borderRadius:8,padding:"5px 14px",color:"#fff",fontSize:12,fontWeight:700,textDecoration:"none"}}>
+                📲 Rappel WhatsApp
+              </a>
+            </div>
+          </div>
+        )}
+
+        {/* ONGLETS */}
+        <div style={{display:"flex",gap:8,marginBottom:24}}>
+          {[{id:"bilans",label:"📊 Bilans & Rapports"},{id:"carte",label:"🗺️ Carte des boutiques"}].map(tab=>(
+            <button key={tab.id} onClick={()=>setActiveTab(tab.id)}
+              style={{background:activeTab===tab.id?"linear-gradient(135deg,#00d97e,#00b360)":"#1a1f2e",border:"none",borderRadius:10,padding:"10px 20px",color:activeTab===tab.id?"#fff":"#8891aa",fontSize:14,fontWeight:700,cursor:"pointer",fontFamily:"'Sora',sans-serif",boxShadow:activeTab===tab.id?"0 4px 14px rgba(0,217,126,0.3)":"none"}}>
+              {tab.label}
+            </button>
+          ))}
+        </div>
+
+        {/* ONGLET CARTE */}
+        {activeTab==="carte"&&(
+          <div>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+              <div>
+                <h2 style={{margin:0,color:"#f0f4ff",fontSize:22,fontWeight:800}}>🗺️ Géolocalisation des boutiques</h2>
+                <div style={{color:"#8891aa",fontSize:13,marginTop:4}}>
+                  {boutiques.filter(b=>b.localisation?.lat).length} boutique(s) géolocalisée(s) sur {boutiques.length} enregistrée(s)
+                </div>
+              </div>
+            </div>
+
+            {/* Légende */}
+            <div style={{display:"flex",gap:16,marginBottom:12,flexWrap:"wrap"}}>
+              {[{col:"#7b8cff",label:"Essai"},{col:"#00d97e",label:"Pro"},{col:"#ffd93d",label:"Business"}].map(l=>(
+                <div key={l.label} style={{display:"flex",alignItems:"center",gap:6}}>
+                  <div style={{width:12,height:12,borderRadius:"50%",background:l.col}}/>
+                  <span style={{color:"#8891aa",fontSize:13}}>{l.label}</span>
+                </div>
+              ))}
+            </div>
+
+            {/* Carte Leaflet */}
+            <div ref={mapRef} style={{height:"460px",borderRadius:14,overflow:"hidden",border:"1px solid rgba(255,255,255,0.08)"}}/>
+
+            {/* Boutiques sans GPS */}
+            {boutiques.filter(b=>!b.localisation?.lat).length>0&&(
+              <div style={{background:"rgba(255,159,67,0.1)",border:"1px solid rgba(255,159,67,0.2)",borderRadius:12,padding:16,marginTop:16}}>
+                <div style={{color:"#ff9f43",fontWeight:700,fontSize:14,marginBottom:8}}>
+                  ⚠️ {boutiques.filter(b=>!b.localisation?.lat).length} boutique(s) sans coordonnées GPS
+                </div>
+                <div style={{color:"#8891aa",fontSize:13}}>
+                  Ces boutiques ont été créées avant l'activation du GPS ou ont refusé la permission.
+                </div>
+                {boutiques.filter(b=>!b.localisation?.lat).map(b=>(
+                  <div key={b.id} style={{color:"#f0f4ff",fontSize:13,marginTop:4}}>• {b.nomBoutique} — {b.telephone}</div>
+                ))}
+              </div>
+            )}
+
+            {/* Tableau récapitulatif */}
+            <div style={{background:"#1a1f2e",borderRadius:14,padding:16,marginTop:16}}>
+              <div style={{color:"#f0f4ff",fontWeight:700,fontSize:15,marginBottom:12}}>📋 Liste des boutiques géolocalisées</div>
+              {boutiques.filter(b=>b.localisation?.lat).map(b=>(
+                <div key={b.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 0",borderBottom:"1px solid rgba(255,255,255,0.05)"}}>
+                  <div>
+                    <div style={{color:"#f0f4ff",fontSize:14,fontWeight:600}}>{b.nomBoutique}</div>
+                    <div style={{color:"#8891aa",fontSize:12}}>
+                      {b.categorie||"N/A"} · {b.canal||""}{b.position?` — ${b.position}`:""}
+                    </div>
+                  </div>
+                  <div style={{textAlign:"right"}}>
+                    <div style={{color:"#8891aa",fontSize:11}}>
+                      {b.localisation.lat.toFixed(4)}, {b.localisation.lng.toFixed(4)}
+                    </div>
+                    {b.localisation.accuracy&&<div style={{color:"#8891aa",fontSize:10}}>±{b.localisation.accuracy}m</div>}
+                  </div>
+                </div>
+              ))}
+              {boutiques.filter(b=>b.localisation?.lat).length===0&&(
+                <div style={{color:"#8891aa",textAlign:"center",padding:20,fontSize:14}}>
+                  Aucune boutique géolocalisée pour l'instant.<br/>
+                  <span style={{fontSize:12}}>Les nouvelles inscriptions captureront automatiquement le GPS.</span>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* ONGLET BILANS */}
+        {activeTab==="bilans"&&<>
+
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:30}}>
+          <div>
+            <h1 style={{margin:0,color:"#f0f4ff",fontSize:26,fontWeight:800}}>{selectedBoutique?.nomBoutique||""}</h1>
+            <div style={{color:"#8891aa",fontSize:15,marginTop:4}}>📊 {ta.bilan} — {getPeriodeLabel()}</div>
+            {selectedBoutique&&<div style={{color:"#8891aa",fontSize:13,marginTop:2}}>
+              📞 {selectedBoutique.telephone}
+              {selectedBoutique.adresse?` | 📍 ${selectedBoutique.adresse}`:""}
+              {selectedBoutique.categorie?` | 🏪 ${selectedBoutique.categorie}`:""}
+              {selectedBoutique.canal?` | 📌 ${selectedBoutique.canal}${selectedBoutique.position?" — "+selectedBoutique.position:""}` : ""}
+            </div>}
+          </div>
+          <button onClick={imprimer}
+            style={{background:"linear-gradient(135deg,#00d97e,#00b360)",border:"none",borderRadius:12,padding:"12px 24px",color:"#fff",fontSize:15,fontWeight:700,cursor:"pointer",fontFamily:"'Sora',sans-serif",display:"flex",alignItems:"center",gap:10,boxShadow:"0 4px 20px rgba(0,217,126,0.3)"}}>
+            {ta.imprimer}
+          </button>
+        </div>
+
+        {!selectedBoutique ? (
+          <div style={{textAlign:"center",padding:80,color:"#8891aa",fontSize:18}}>{ta.select_boutique}</div>
+        ) : (
+          <>
+            {/* STATS */}
+            <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:16,marginBottom:24}}>
+              {[
+                {label:ta.ca,value:fmt(stats.ca),color:"#f0f4ff",bg:"rgba(255,255,255,0.05)"},
+                {label:ta.encaisse,value:fmt(stats.enc),color:"#00d97e",bg:"rgba(0,217,126,0.1)"},
+                {label:ta.dettes,value:fmt(stats.det),color:"#ff6b6b",bg:"rgba(255,107,107,0.1)"},
+                {label:ta.nb_ventes,value:stats.nb,color:"#7b8cff",bg:"rgba(123,140,255,0.1)"},
+              ].map(c=>(
+                <div key={c.label} style={{background:c.bg,border:`1px solid ${c.color}22`,borderRadius:16,padding:20}}>
+                  <div style={{color:"#8891aa",fontSize:12,fontWeight:600,textTransform:"uppercase",marginBottom:8}}>{c.label}</div>
+                  <div style={{color:c.color,fontWeight:800,fontSize:22}}>{c.value}</div>
+                </div>
+              ))}
+            </div>
+
+            {/* MODES PAIEMENT */}
+            <div style={{background:"#1a1f2e",borderRadius:16,padding:20,marginBottom:24}}>
+              <div style={{color:"#f0f4ff",fontWeight:700,fontSize:17,marginBottom:16}}>{ta.modes}</div>
+              <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12}}>
+                {[
+                  {label:ta.cash,value:stats.cash,color:"#00d97e"},
+                  {label:ta.mobile,value:stats.mobile,color:"#7b8cff"},
+                  {label:ta.cheque,value:stats.cheque,color:"#ffd93d"},
+                  {label:ta.credit,value:stats.credit,color:"#ff6b6b"},
+                ].map(m=>(
+                  <div key={m.label} style={{background:"#252b3b",borderRadius:12,padding:16,textAlign:"center"}}>
+                    <div style={{color:"#8891aa",fontSize:13,marginBottom:8}}>{m.label}</div>
+                    <div style={{color:m.color,fontWeight:800,fontSize:18}}>{fmt(m.value)}</div>
+                    <div style={{color:"#8891aa",fontSize:11,marginTop:4}}>{stats.ca>0?Math.round((m.value/stats.ca)*100):0}% {ta.du_ca}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* GRAPHIQUE */}
+            <div style={{background:"#1a1f2e",borderRadius:16,padding:20,marginBottom:24}}>
+              <div style={{color:"#f0f4ff",fontWeight:700,fontSize:17,marginBottom:16}}>
+                {ta.evolution} {periodType==="annuel"?ta.mensuelle:periodType==="trimestriel"?ta.trimestrielle:""} {selectedYear}
+              </div>
+              <div style={{overflowX:"auto"}}>
+                <div style={{display:"flex",alignItems:"flex-end",gap:8,minWidth:600,height:200,padding:"0 10px"}}>
+                  {(periodType==="trimestriel"?dataTrimestrielle:dataMensuelle).map((d,i)=>{
+                    const maxCA=Math.max(...(periodType==="trimestriel"?dataTrimestrielle:dataMensuelle).map(x=>x.ca),1);
+                    const hCA=Math.round((d.ca/maxCA)*160);
+                    const hEnc=Math.round((d.encaisse/maxCA)*160);
+                    const isActive=(periodType==="mensuel"&&i===selectedMonth)||(periodType==="trimestriel"&&i===selectedQuarter);
+                    return(
+                      <div key={i} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:4}}>
+                        <div style={{fontSize:10,color:"#00d97e",fontWeight:700}}>{d.ca>0?`${Math.round(d.ca/1000)}k`:""}</div>
+                        <div style={{display:"flex",gap:2,alignItems:"flex-end",height:160}}>
+                          <div style={{width:14,height:hCA||2,background:isActive?"#00d97e":"#2a3a4a",borderRadius:"3px 3px 0 0"}}/>
+                          <div style={{width:14,height:hEnc||2,background:isActive?"rgba(0,217,126,0.4)":"rgba(123,140,255,0.4)",borderRadius:"3px 3px 0 0"}}/>
+                        </div>
+                        <div style={{fontSize:10,color:isActive?"#00d97e":"#8891aa",fontWeight:isActive?700:400}}>{d.mois||d.trimestre}</div>
+                        <div style={{fontSize:9,color:"#8891aa"}}>{d.nb}v</div>
+                      </div>
+                    );
+                  })}
+                </div>
+                <div style={{display:"flex",gap:20,marginTop:12,justifyContent:"center"}}>
+                  <div style={{display:"flex",alignItems:"center",gap:6}}><div style={{width:14,height:14,background:"#2a3a4a",borderRadius:3}}/><span style={{color:"#8891aa",fontSize:12}}>{ta.ca}</span></div>
+                  <div style={{display:"flex",alignItems:"center",gap:6}}><div style={{width:14,height:14,background:"rgba(123,140,255,0.4)",borderRadius:3}}/><span style={{color:"#8891aa",fontSize:12}}>{ta.encaisse}</span></div>
+                </div>
+              </div>
+            </div>
+
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:20,marginBottom:24}}>
+              {/* TOP PRODUITS */}
+              <div style={{background:"#1a1f2e",borderRadius:16,padding:20}}>
+                <div style={{color:"#f0f4ff",fontWeight:700,fontSize:17,marginBottom:16}}>{ta.top_produits}</div>
+                {topProduits.length===0
+                  ?<div style={{color:"#8891aa",fontSize:14,textAlign:"center",padding:20}}>{ta.aucune_vente}</div>
+                  :topProduits.map(([n,q],i)=>(
+                  <div key={n} style={{marginBottom:14}}>
+                    <div style={{display:"flex",justifyContent:"space-between",marginBottom:5}}>
+                      <span style={{color:"#f0f4ff",fontSize:14,fontWeight:600}}>#{i+1} {n}</span>
+                      <span style={{color:"#8891aa",fontSize:13}}>{q} {ta.unites}</span>
+                    </div>
+                    <div style={{height:6,background:"#252b3b",borderRadius:99}}>
+                      <div style={{height:"100%",width:`${(q/topProduits[0][1])*100}%`,background:["#00d97e","#7b8cff","#ffd93d","#ff9f43","#ff6b6b"][i],borderRadius:99}}/>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* TOP CLIENTS */}
+              <div style={{background:"#1a1f2e",borderRadius:16,padding:20}}>
+                <div style={{color:"#f0f4ff",fontWeight:700,fontSize:17,marginBottom:16}}>{ta.top_clients}</div>
+                {topClients.length===0
+                  ?<div style={{color:"#8891aa",fontSize:14,textAlign:"center",padding:20}}>{ta.aucun_client}</div>
+                  :topClients.map((c,i)=>(
+                  <div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 0",borderBottom:"1px solid rgba(255,255,255,0.05)"}}>
+                    <div style={{display:"flex",alignItems:"center",gap:10}}>
+                      <div style={{width:30,height:30,borderRadius:"50%",background:`${["#ffd93d","#8891aa","#ff9f43","#7b8cff","#00d97e"][i]}22`,display:"flex",alignItems:"center",justifyContent:"center",color:["#ffd93d","#8891aa","#ff9f43","#7b8cff","#00d97e"][i],fontWeight:800,fontSize:13}}>#{i+1}</div>
+                      <div>
+                        <div style={{color:"#f0f4ff",fontSize:14,fontWeight:600}}>{c.nom}</div>
+                        {c.tel&&<div style={{color:"#8891aa",fontSize:12}}>📞 {c.tel}</div>}
+                        <div style={{color:"#8891aa",fontSize:12}}>{c.nb} {ta.achats}</div>
+                      </div>
+                    </div>
+                    <div style={{color:"#00d97e",fontWeight:800,fontSize:15}}>{fmt(c.total)}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* VENDEURS */}
+            {vendeurs.length>0&&<div style={{background:"#1a1f2e",borderRadius:16,padding:20,marginBottom:24}}>
+              <div style={{color:"#f0f4ff",fontWeight:700,fontSize:17,marginBottom:16}}>{ta.perf_vendeurs}</div>
+              <table style={{width:"100%",borderCollapse:"collapse"}}>
+                <thead>
+                  <tr style={{borderBottom:"1px solid rgba(255,255,255,0.1)"}}>
+                    {[ta.vendeur,ta.nb_ventes_col,ta.ca,ta.part_ca].map(h=>(
+                      <th key={h} style={{color:"#8891aa",fontSize:13,fontWeight:600,textAlign:"left",padding:"8px 12px",textTransform:"uppercase"}}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {vendeurs.map((v,i)=>(
+                    <tr key={i} style={{borderBottom:"1px solid rgba(255,255,255,0.05)"}}>
+                      <td style={{color:"#f0f4ff",fontSize:14,fontWeight:600,padding:"12px"}}>{v.nom}</td>
+                      <td style={{color:"#7b8cff",fontSize:14,padding:"12px"}}>{v.nb}</td>
+                      <td style={{color:"#00d97e",fontSize:14,fontWeight:700,padding:"12px"}}>{fmt(v.ca)}</td>
+                      <td style={{padding:"12px"}}>
+                        <div style={{display:"flex",alignItems:"center",gap:8}}>
+                          <div style={{flex:1,height:6,background:"#252b3b",borderRadius:99}}>
+                            <div style={{height:"100%",width:`${stats.ca>0?Math.round((v.ca/stats.ca)*100):0}%`,background:"#00d97e",borderRadius:99}}/>
+                          </div>
+                          <span style={{color:"#8891aa",fontSize:12,minWidth:35}}>{stats.ca>0?Math.round((v.ca/stats.ca)*100):0}%</span>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>}
+
+            {/* DERNIÈRES VENTES */}
+            <div style={{background:"#1a1f2e",borderRadius:16,padding:20}}>
+              <div style={{color:"#f0f4ff",fontWeight:700,fontSize:17,marginBottom:16}}>{ta.dernieres_ventes} ({vp.length})</div>
+              {vp.length===0
+                ?<div style={{color:"#8891aa",fontSize:14,textAlign:"center",padding:20}}>{ta.aucune_vente}</div>
+                :<div style={{overflowX:"auto"}}>
+                  <table style={{width:"100%",borderCollapse:"collapse"}}>
+                    <thead>
+                      <tr style={{borderBottom:"1px solid rgba(255,255,255,0.1)"}}>
+                        {[ta.facture,ta.date,ta.produit,ta.client,ta.vendeur,ta.montant,ta.paye,ta.mode].map(h=>(
+                          <th key={h} style={{color:"#8891aa",fontSize:12,fontWeight:600,textAlign:"left",padding:"8px 12px",textTransform:"uppercase"}}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {vp.slice(-20).reverse().map((v,i)=>(
+                        <tr key={i} style={{borderBottom:"1px solid rgba(255,255,255,0.04)"}}>
+                          <td style={{color:"#7b8cff",fontSize:12,padding:"10px 12px"}}>{v.factureId}</td>
+                          <td style={{color:"#8891aa",fontSize:12,padding:"10px 12px"}}>{fmtDate(getDate(v))}</td>
+                          <td style={{color:"#f0f4ff",fontSize:13,fontWeight:600,padding:"10px 12px"}}>{v.produit}</td>
+                          <td style={{color:"#ff9f43",fontSize:12,padding:"10px 12px"}}>{v.clientNom||"-"}</td>
+                          <td style={{color:"#7b8cff",fontSize:12,padding:"10px 12px"}}>{v.vendeurNom||"-"}</td>
+                          <td style={{color:"#f0f4ff",fontSize:13,fontWeight:700,padding:"10px 12px"}}>{fmt(v.montant)}</td>
+                          <td style={{color:v.paye>=v.montant?"#00d97e":"#ff9f43",fontSize:13,fontWeight:700,padding:"10px 12px"}}>{fmt(v.paye)}</td>
+                          <td style={{padding:"10px 12px"}}>
+                            <span style={{background:v.mode==="cash"?"rgba(0,217,126,0.15)":v.mode==="mobile"?"rgba(123,140,255,0.15)":v.mode==="cheque"?"rgba(255,217,61,0.15)":"rgba(255,107,107,0.15)",color:v.mode==="cash"?"#00d97e":v.mode==="mobile"?"#7b8cff":v.mode==="cheque"?"#ffd93d":"#ff6b6b",borderRadius:6,padding:"3px 8px",fontSize:11,fontWeight:700}}>
+                              {v.mode==="cash"?ta.cash:v.mode==="mobile"?ta.mobile:v.mode==="cheque"?ta.cheque:ta.credit}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              }
+            </div>
+          </>
+        )}
+        </>}
+      </div>
     </div>
   );
 };
@@ -704,7 +1384,7 @@ const AppBoutique = ({user,onLogout,t,langue,setLangue}) => {
       {/* CONTENU */}
       <div style={{padding:isPC?"30px":"14px",paddingBottom:isPC?30:100,marginLeft:isPC?240:0,flex:isPC?1:undefined}}>
         {page==="dashboard"&&<DashBoutique ventes={ventes} produits={produits} clients={clients} t={t} langue={langue}/>}
-        {page==="stock"&&isProp&&<StockPage produits={produits} saveProduit={saveProduit} delProduit={delProduit} t={t} nbProduits={nbProduits} lim={lim}/>}
+        {page==="stock"&&isProp&&<StockPage produits={produits} saveProduit={saveProduit} delProduit={delProduit} t={t} nbProduits={nbProduits} lim={lim} langue={langue}/>}
         {page==="ventes"&&<VentesPage produits={produits} ventes={ventes} clients={clients} saveVente={saveVente} saveClient={saveClient} t={t} isProp={isProp} boutique={boutique} setShowFacture={setShowFacture} user={user} lim={lim}/>}
         {page==="dettes"&&isProp&&<DettesPage clients={clients} saveClient={saveClient} ventes={ventes} t={t} boutique={boutique}/>}
         {page==="rapports"&&isProp&&<RapportsPage ventes={ventes} produits={produits} t={t} setShowFacture={setShowFacture} lim={lim}/>}
@@ -760,6 +1440,9 @@ const DashBoutique = ({ventes,produits,clients,t,langue}) => {
   const rup=produits.filter(p=>!p.deleted&&p.quantite===0).length;
   const al=produits.filter(p=>!p.deleted&&p.quantite>0&&p.quantite<=p.alerte).length;
   const ben=auj.reduce((s,v)=>{const p=produits.find(p=>p.nom===v.produit);return p?s+(p.prixVente-p.prixAchat)*(v.quantite||0):s;},0);
+  // Alertes péremption
+  const prodPerimes  = produits.filter(p=>!p.deleted&&statutPeremption(p.datePeremption)==="expired");
+  const prodWarnings = produits.filter(p=>!p.deleted&&["critical","warning"].includes(statutPeremption(p.datePeremption)));
   return(
     <div>
       <div style={{marginBottom:16}}>
@@ -778,6 +1461,11 @@ const DashBoutique = ({ventes,produits,clients,t,langue}) => {
       {(rup>0||al>0)&&<div style={{background:"rgba(255,159,67,0.1)",border:"1px solid rgba(255,159,67,0.3)",borderRadius:12,padding:14,marginBottom:14}}>
         <div style={{color:"#ff9f43",fontWeight:700,fontSize:15,marginBottom:8}}>{t.alertesStock}</div>
         {produits.filter(p=>!p.deleted&&p.quantite<=p.alerte).map(p=><div key={p.id} style={{color:"#c8cfd8",fontSize:14,padding:"3px 0"}}>{p.quantite===0?"🔴":"🟡"} {p.nom} — {p.quantite===0?t.ruptureTotale:`${p.quantite} ${t.restants}`}</div>)}
+      </div>}
+      {(prodPerimes.length>0||prodWarnings.length>0)&&<div style={{background:"rgba(255,71,87,0.08)",border:"1px solid rgba(255,71,87,0.25)",borderRadius:12,padding:14,marginBottom:14}}>
+        <div style={{color:"#ff6b6b",fontWeight:700,fontSize:15,marginBottom:8}}>🗓️ Alertes péremption</div>
+        {prodPerimes.map(p=><div key={p.id} style={{color:"#ff4757",fontSize:13,marginBottom:3}}>🔴 <strong>{p.nom}</strong> — Périmé</div>)}
+        {prodWarnings.map(p=><div key={p.id} style={{color:"#ff9f43",fontSize:13,marginBottom:3}}>⚠️ <strong>{p.nom}</strong> — {moisAvantPeremption(p.datePeremption)} mois restants</div>)}
       </div>}
       <div style={{background:"#1a1f2e",borderRadius:14,padding:14}}>
         <div style={{color:"#f0f4ff",fontWeight:700,fontSize:16,marginBottom:10}}>{t.dernieresVentes}</div>
@@ -800,58 +1488,164 @@ const DashBoutique = ({ventes,produits,clients,t,langue}) => {
   );
 };
 
-const StockPage = ({produits,saveProduit,delProduit,t,nbProduits,lim}) => {
-  const [show,setShow]=useState(false); const [edit,setEdit]=useState(null); const [search,setSearch]=useState("");
-  const [f,setF]=useState({nom:"",categorie:"Alimentation",prixAchat:"",prixVente:"",quantite:"",alerte:"5"});
-  const fil=produits.filter(p=>!p.deleted&&p.nom?.toLowerCase().includes(search.toLowerCase()));
-  const sc=p=>p.quantite===0?"#ff4757":p.quantite<=p.alerte?"#ff9f43":"#00d97e";
-  const save=()=>{if(!f.nom)return;saveProduit({...f,prixAchat:+f.prixAchat,prixVente:+f.prixVente,quantite:+f.quantite,alerte:+f.alerte,id:edit?.id});setShow(false);};
-  const limiteAtteinte=lim.produits!==Infinity&&nbProduits>=lim.produits;
+const StockPage = ({produits,saveProduit,delProduit,t,nbProduits,lim,langue}) => {
+  const [show,setShow]=useState(false);
+  const [edit,setEdit]=useState(null);
+  const [search,setSearch]=useState("");
+  const [translating,setTranslating]=useState(false);
+  const [f,setF]=useState({nom:"",categorie:"Alimentation",categorieLibre:"",prixAchat:"",prixVente:"",quantite:"",alerte:"5",datePeremption:""});
+
+  const CATS = ["Alimentation","Boisson","Médicaments","Ménager","Cosmétique","Électronique","Vêtements","Papeterie","Autre (préciser...)"];
+  const categorieAffichee = (p) => {
+    if(p.translations?.categorie?.[langue]) return p.translations.categorie[langue];
+    return p.categorieLibre||p.categorie||"";
+  };
+  const nomAffiche = (p) => {
+    if(p.translations?.nom?.[langue]) return p.translations.nom[langue];
+    return p.nom||"";
+  };
+
+  const sc = p => p.quantite===0?"#ff4757":p.quantite<=p.alerte?"#ff9f43":"#00d97e";
+
+  const save = async () => {
+    if(!f.nom) return;
+    setTranslating(true);
+    const cat = f.categorie==="Autre (préciser...)" ? (f.categorieLibre||"Autre") : f.categorie;
+    let translations = null;
+    try { translations = await traduireProduit(f.nom, cat); } catch(e) {}
+    setTranslating(false);
+    saveProduit({
+      ...f,
+      categorie: cat,
+      prixAchat:+f.prixAchat, prixVente:+f.prixVente,
+      quantite:+f.quantite, alerte:+f.alerte,
+      datePeremption: f.datePeremption||"",
+      translations,
+      id:edit?.id
+    });
+    setShow(false);
+  };
+
+  const limiteAtteinte = lim.produits!==Infinity&&nbProduits>=lim.produits;
+
+  // Alertes péremption
+  const perimes   = produits.filter(p=>!p.deleted&&statutPeremption(p.datePeremption)==="expired");
+  const critiques = produits.filter(p=>!p.deleted&&statutPeremption(p.datePeremption)==="critical");
+  const warnings  = produits.filter(p=>!p.deleted&&statutPeremption(p.datePeremption)==="warning");
+
+  const fil = produits.filter(p=>!p.deleted&&(
+    nomAffiche(p).toLowerCase().includes(search.toLowerCase())||
+    categorieAffichee(p).toLowerCase().includes(search.toLowerCase())
+  ));
+
   return(
     <div>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
         <h2 style={{margin:0,color:"#f0f4ff",fontSize:20,fontWeight:800}}>{t.monStock}</h2>
         <div style={{display:"flex",alignItems:"center",gap:8}}>
           {lim.produits!==Infinity&&<span style={{color:limiteAtteinte?"#ff4757":"#8891aa",fontSize:14,fontWeight:600}}>{nbProduits}/{lim.produits}</span>}
-          <Btn onClick={()=>{setEdit(null);setF({nom:"",categorie:"Alimentation",prixAchat:"",prixVente:"",quantite:"",alerte:"5"});setShow(true);}} small disabled={limiteAtteinte}>+ {t.ajouter}</Btn>
+          <Btn onClick={()=>{setEdit(null);setF({nom:"",categorie:"Alimentation",categorieLibre:"",prixAchat:"",prixVente:"",quantite:"",alerte:"5",datePeremption:""});setShow(true);}} small disabled={limiteAtteinte}>+ {t.ajouter}</Btn>
         </div>
       </div>
+
       {limiteAtteinte&&<div style={{background:"rgba(255,71,87,0.1)",border:"1px solid rgba(255,71,87,0.3)",borderRadius:9,padding:"10px 14px",marginBottom:14}}>
         <div style={{color:"#ff4757",fontSize:14,fontWeight:600}}>⚠️ Maximum {lim.produits} produits avec le plan Essai</div>
         <a href={`https://wa.me/${WHATSAPP}?text=${encodeURIComponent("Bonjour, je veux passer au plan Pro.")}`} target="_blank" style={{color:"#00d97e",fontSize:13,fontWeight:700,textDecoration:"none"}}>→ Plan Pro — 5 000 FCFA/mois</a>
       </div>}
+
+      {/* Alertes péremption */}
+      {(perimes.length>0||critiques.length>0||warnings.length>0)&&(
+        <div style={{background:"rgba(255,71,87,0.08)",border:"1px solid rgba(255,71,87,0.25)",borderRadius:12,padding:14,marginBottom:14}}>
+          <div style={{color:"#ff6b6b",fontWeight:700,fontSize:14,marginBottom:8}}>🗓️ Alertes dates de péremption</div>
+          {perimes.map(p=><div key={p.id} style={{color:"#ff4757",fontSize:13,marginBottom:3}}>🔴 <strong>{nomAffiche(p)}</strong> — Périmé depuis le {new Date(p.datePeremption).toLocaleDateString("fr-FR")}</div>)}
+          {critiques.map(p=><div key={p.id} style={{color:"#ff6b6b",fontSize:13,marginBottom:3}}>🟠 <strong>{nomAffiche(p)}</strong> — Périme le {new Date(p.datePeremption).toLocaleDateString("fr-FR")} ({moisAvantPeremption(p.datePeremption)} mois)</div>)}
+          {warnings.map(p=><div key={p.id} style={{color:"#ff9f43",fontSize:13,marginBottom:3}}>⚠️ <strong>{nomAffiche(p)}</strong> — Périme le {new Date(p.datePeremption).toLocaleDateString("fr-FR")} ({moisAvantPeremption(p.datePeremption)} mois)</div>)}
+        </div>
+      )}
+
       <input value={search} onChange={e=>setSearch(e.target.value)} placeholder={t.chercher} style={{...IS,marginBottom:14,width:"100%",boxSizing:"border-box"}}/>
+
       <div style={{display:"flex",flexDirection:"column",gap:8}}>
-        {fil.map(p=>(
-          <div key={p.id} style={{background:"#1a1f2e",borderRadius:12,padding:"13px 15px",display:"flex",alignItems:"center",gap:10}}>
-            <div style={{width:8,height:8,borderRadius:"50%",background:sc(p),boxShadow:`0 0 6px ${sc(p)}`}}/>
-            <div style={{flex:1}}>
-              <div style={{color:"#f0f4ff",fontWeight:700,fontSize:15}}>{p.nom}</div>
-              <div style={{color:"#8891aa",fontSize:13}}>{p.categorie}</div>
-              <div style={{display:"flex",gap:10,marginTop:3}}><span style={{color:"#00d97e",fontSize:14,fontWeight:600}}>{fmt(p.prixVente)}</span><span style={{color:"#8891aa",fontSize:13}}>Achat: {fmt(p.prixAchat)}</span></div>
+        {fil.map(p=>{
+          const statut = statutPeremption(p.datePeremption);
+          const coulPerem = couleurPeremption(statut);
+          return(
+            <div key={p.id} style={{background:"#1a1f2e",borderRadius:12,padding:"13px 15px",display:"flex",alignItems:"center",gap:10,border:statut&&statut!=="ok"?`1px solid ${coulPerem}33`:"1px solid transparent"}}>
+              <div style={{width:8,height:8,borderRadius:"50%",background:sc(p),boxShadow:`0 0 6px ${sc(p)}`}}/>
+              <div style={{flex:1}}>
+                <div style={{color:"#f0f4ff",fontWeight:700,fontSize:15}}>{nomAffiche(p)}</div>
+                <div style={{color:"#8891aa",fontSize:13}}>{categorieAffichee(p)}</div>
+                <div style={{display:"flex",gap:10,marginTop:3,flexWrap:"wrap"}}>
+                  <span style={{color:"#00d97e",fontSize:14,fontWeight:600}}>{fmt(p.prixVente)}</span>
+                  <span style={{color:"#8891aa",fontSize:13}}>Achat: {fmt(p.prixAchat)}</span>
+                  {p.datePeremption&&statut&&statut!=="ok"&&(
+                    <span style={{color:coulPerem,fontSize:12,fontWeight:600}}>
+                      {statut==="expired"?"🔴 Périmé":statut==="critical"?`🟠 ${moisAvantPeremption(p.datePeremption)}m restant`:`⚠️ ${moisAvantPeremption(p.datePeremption)}m`}
+                    </span>
+                  )}
+                  {p.translations&&<span style={{fontSize:10,color:"#3a4a5a",background:"#252b3b",borderRadius:4,padding:"1px 5px"}}>🌐</span>}
+                </div>
+              </div>
+              <div style={{textAlign:"right"}}><div style={{color:sc(p),fontWeight:800,fontSize:18}}>{p.quantite}</div><div style={{color:"#8891aa",fontSize:13}}>{t.unites}</div></div>
+              <div style={{display:"flex",flexDirection:"column",gap:5}}>
+                <button onClick={()=>{setEdit(p);setF({...p,categorieLibre:p.categorieLibre||""});setShow(true);}} style={{background:"#252b3b",border:"none",borderRadius:7,padding:7,cursor:"pointer",display:"flex"}}><Icon name="edit" size={14} color="#7b8cff"/></button>
+                <button onClick={()=>delProduit(p.id)} style={{background:"#252b3b",border:"none",borderRadius:7,padding:7,cursor:"pointer",display:"flex"}}><Icon name="trash" size={14} color="#ff6b6b"/></button>
+              </div>
             </div>
-            <div style={{textAlign:"right"}}><div style={{color:sc(p),fontWeight:800,fontSize:18}}>{p.quantite}</div><div style={{color:"#8891aa",fontSize:13}}>{t.unites}</div></div>
-            <div style={{display:"flex",flexDirection:"column",gap:5}}>
-              <button onClick={()=>{setEdit(p);setF({...p});setShow(true);}} style={{background:"#252b3b",border:"none",borderRadius:7,padding:7,cursor:"pointer",display:"flex"}}><Icon name="edit" size={14} color="#7b8cff"/></button>
-              <button onClick={()=>delProduit(p.id)} style={{background:"#252b3b",border:"none",borderRadius:7,padding:7,cursor:"pointer",display:"flex"}}><Icon name="trash" size={14} color="#ff6b6b"/></button>
-            </div>
-          </div>
-        ))}
+          );
+        })}
         {fil.length===0&&<div style={{color:"#8891aa",textAlign:"center",padding:30,fontSize:16}}>Aucun produit</div>}
       </div>
+
       {show&&<Modal titre={edit?t.modifierProduit:t.nouveauProduit} onClose={()=>setShow(false)}>
+
+        {/* Nom produit */}
         <Field label={t.nomProduit} value={f.nom} onChange={v=>setF({...f,nom:v})} placeholder="Ex: Riz 25kg"/>
-        <Field label={t.categorie} value={f.categorie} onChange={v=>setF({...f,categorie:v})} options={["Alimentation","Boisson","Ménager","Cosmétique","Électronique","Autre"].map(c=>({value:c,label:c}))}/>
+
+        {/* Catégorie + champ libre */}
+        <div style={{marginBottom:16}}>
+          <label style={{display:"block",color:"#8891aa",fontSize:13,fontWeight:600,marginBottom:6,textTransform:"uppercase"}}>{t.categorie}</label>
+          <select value={f.categorie} onChange={e=>setF({...f,categorie:e.target.value})} style={{...IS,marginBottom:f.categorie==="Autre (préciser...)"?8:0}}>
+            {CATS.map(c=><option key={c} value={c}>{c}</option>)}
+          </select>
+          {f.categorie==="Autre (préciser...)"&&(
+            <input value={f.categorieLibre} onChange={e=>setF({...f,categorieLibre:e.target.value})} placeholder="Précisez la catégorie..." style={IS}/>
+          )}
+        </div>
+
+        {/* Prix */}
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
           <Field label={t.prixAchat} type="number" value={f.prixAchat} onChange={v=>setF({...f,prixAchat:v})} placeholder="0"/>
           <Field label={t.prixVente} type="number" value={f.prixVente} onChange={v=>setF({...f,prixVente:v})} placeholder="0"/>
         </div>
+
+        {/* Quantité + alerte */}
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
           <Field label={t.quantite} type="number" value={f.quantite} onChange={v=>setF({...f,quantite:v})} placeholder="0"/>
           <Field label={t.alerteStockMin} type="number" value={f.alerte} onChange={v=>setF({...f,alerte:v})} placeholder="5"/>
         </div>
-        {+f.prixAchat>0&&+f.prixVente>0&&<div style={{background:"rgba(0,217,126,0.1)",border:"1px solid rgba(0,217,126,0.3)",borderRadius:9,padding:"10px 14px",marginBottom:14}}><span style={{color:"#8891aa",fontSize:14}}>{t.margeBeneficiaire}: </span><span style={{color:"#00d97e",fontWeight:700,fontSize:15}}>{fmt(f.prixVente-f.prixAchat)} ({Math.round(((f.prixVente-f.prixAchat)/f.prixAchat)*100)}%)</span></div>}
-        <Btn onClick={save} full>{edit?t.enregistrer:t.ajouterAuStock}</Btn>
+
+        {/* Date de péremption */}
+        <div style={{marginBottom:16}}>
+          <label style={{display:"block",color:"#8891aa",fontSize:13,fontWeight:600,marginBottom:6,textTransform:"uppercase"}}>🗓️ Date de péremption</label>
+          <input type="date" value={f.datePeremption} onChange={e=>setF({...f,datePeremption:e.target.value})} style={{...IS,colorScheme:"dark"}}/>
+          <div style={{color:"#8891aa",fontSize:11,marginTop:4}}>Alerte automatique 4 mois avant la date limite</div>
+        </div>
+
+        {/* Marge */}
+        {+f.prixAchat>0&&+f.prixVente>0&&<div style={{background:"rgba(0,217,126,0.1)",border:"1px solid rgba(0,217,126,0.3)",borderRadius:9,padding:"10px 14px",marginBottom:14}}>
+          <span style={{color:"#8891aa",fontSize:14}}>{t.margeBeneficiaire}: </span>
+          <span style={{color:"#00d97e",fontWeight:700,fontSize:15}}>{fmt(f.prixVente-f.prixAchat)} ({Math.round(((f.prixVente-f.prixAchat)/f.prixAchat)*100)}%)</span>
+        </div>}
+
+        {/* Info traduction */}
+        <div style={{background:"rgba(123,140,255,0.08)",border:"1px solid rgba(123,140,255,0.2)",borderRadius:9,padding:"8px 14px",marginBottom:14}}>
+          <span style={{color:"#7b8cff",fontSize:12}}>🌐 Le nom et la catégorie seront traduits automatiquement en FR / EN / AR</span>
+        </div>
+
+        <Btn onClick={save} full disabled={translating}>
+          {translating?"🌐 Traduction en cours...":edit?t.enregistrer:t.ajouterAuStock}
+        </Btn>
       </Modal>}
     </div>
   );
