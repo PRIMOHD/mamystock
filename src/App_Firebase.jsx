@@ -151,6 +151,17 @@ const T = {
     rappel_whatsapp:"📲 Rappeler via WhatsApp",
     client_anonyme:"👤 Anonyme", client_existant:"📋 Existant", client_nouveau:"➕ Nouveau",
     achat:"achat(s)",
+    nomProprietaire:"Nom du propriétaire / gérant",
+    jourNaissance:"Jour de naissance (facultatif)",
+    moisNaissance:"Mois de naissance (facultatif)",
+    categorieAutre:"Autre — précisez ici...",
+    emplacement:"Emplacement / Canal",
+    precisionPosition:"Précision : nom du marché, n° stand, quartier...",
+    langueConnexion:"Langue",
+    geolocalisation:"Géolocalisation GPS",
+    geoAuto:"Votre position sera captée automatiquement à l'inscription.",
+    essaiGratuit:"30 jours d'essai gratuit — aucune carte requise",
+    anniversaireInfo:"Pour vous souhaiter un joyeux anniversaire 🎂",
   },
   en: {
     appName:"Lapia", bonjour:"Hello 👋", accueil:"Home", stock:"Stock",
@@ -208,6 +219,17 @@ const T = {
     rappel_whatsapp:"📲 Remind via WhatsApp",
     client_anonyme:"👤 Anonymous", client_existant:"📋 Existing", client_nouveau:"➕ New",
     achat:"purchase(s)",
+    nomProprietaire:"Owner / Manager name",
+    jourNaissance:"Day of birth (optional)",
+    moisNaissance:"Month of birth (optional)",
+    categorieAutre:"Other — specify here...",
+    emplacement:"Location / Channel",
+    precisionPosition:"Specify: market name, stall number, district...",
+    langueConnexion:"Language",
+    geolocalisation:"GPS Location",
+    geoAuto:"Your position will be captured automatically at registration.",
+    essaiGratuit:"30-day free trial — no card required",
+    anniversaireInfo:"So we can wish you a happy birthday 🎂",
   },
   ar: {
     appName:"Lapia", bonjour:"مرحباً 👋", accueil:"الرئيسية", stock:"المخزون",
@@ -265,6 +287,17 @@ const T = {
     rappel_whatsapp:"📲 تذكير عبر واتساب",
     client_anonyme:"👤 مجهول", client_existant:"📋 موجود", client_nouveau:"➕ جديد",
     achat:"شراء",
+    nomProprietaire:"اسم المالك / المدير",
+    jourNaissance:"يوم الميلاد (اختياري)",
+    moisNaissance:"شهر الميلاد (اختياري)",
+    categorieAutre:"أخرى — حدد هنا...",
+    emplacement:"الموقع / القناة",
+    precisionPosition:"تحديد: اسم السوق، رقم الكشك، الحي...",
+    langueConnexion:"اللغة",
+    geolocalisation:"الموقع GPS",
+    geoAuto:"سيتم تحديد موقعك تلقائياً عند التسجيل.",
+    essaiGratuit:"تجربة مجانية 30 يوماً — لا بطاقة مطلوبة",
+    anniversaireInfo:"لنهنئك بعيد ميلادك 🎂",
   }
 };
 
@@ -439,28 +472,50 @@ const Facture = ({vente,boutique,onClose,t}) => {
   );
 };
 
-const CATEGORIES_BOUTIQUE = [
-  "Alimentation générale","Épicerie","Supermarché","Pharmacie","Salon de coiffure",
-  "Restauration / Maquis","Électronique / Téléphonie","Vêtements / Textile",
-  "Quincaillerie","Cosmétique / Beauté","Boulangerie / Pâtisserie",
-  "Matériaux de construction","Librairie / Papeterie","Autre",
-];
+// Catégories boutiques traduits (index synchronisé entre les 3 langues)
+const CATEGORIES_BOUTIQUE_TRANS = {
+  fr:["Alimentation générale","Épicerie","Supermarché","Pharmacie","Salon de coiffure","Restauration / Maquis","Électronique / Téléphonie","Vêtements / Textile","Quincaillerie","Cosmétique / Beauté","Boulangerie / Pâtisserie","Matériaux de construction","Librairie / Papeterie","Autre"],
+  en:["General Food Store","Grocery","Supermarket","Pharmacy","Hair Salon","Restaurant / Food Stall","Electronics / Phones","Clothing / Textiles","Hardware Store","Cosmetics / Beauty","Bakery / Pastry","Building Materials","Bookstore / Stationery","Other"],
+  ar:["متجر غذائي عام","بقالة","سوبرماركت","صيدلية","صالون حلاقة","مطعم / مقهى","إلكترونيات / هواتف","ملابس / نسيج","أدوات البناء","مستحضرات تجميل","مخبزة / حلويات","مواد البناء","مكتبة / قرطاسية","أخرى"],
+};
+const CATEGORIES_BOUTIQUE = CATEGORIES_BOUTIQUE_TRANS.fr; // alias par défaut
+
+// Catégories stock traduits
+const CATS_STOCK_TRANS = {
+  fr:["Alimentation","Boisson","Médicaments","Ménager","Cosmétique","Électronique","Vêtements","Papeterie","Autre (préciser...)"],
+  en:["Food","Drinks","Medicine","Household","Cosmetics","Electronics","Clothing","Stationery","Other (specify...)"],
+  ar:["غذاء","مشروبات","أدوية","منزلية","مستحضرات","إلكترونيات","ملابس","قرطاسية","أخرى (حدد...)"],
+};
+
 const CANAUX_BOUTIQUE = [
   "Marché central","Marché de quartier","Rue commerçante","Centre commercial",
   "Domicile / Résidence","Zone industrielle","Bord de route","Autre",
 ];
 
-const Login = ({onLogin,t}) => {
+const Login = ({onLogin, t, langue, setLangue}) => {
   const [isInscription,setIsInscription]=useState(false);
   const [tel,setTel]=useState(""); const [pwd,setPwd]=useState("");
-  const [nom,setNom]=useState(""); const [adr,setAdr]=useState("");
-  const [categorie,setCategorie]=useState("Alimentation générale");
+  const [nom,setNom]=useState(""); const [nomProp,setNomProp]=useState("");
+  const [adr,setAdr]=useState("");
+  const [catIndex,setCatIndex]=useState(0); const [catLibre,setCatLibre]=useState("");
   const [canal,setCanal]=useState("Marché de quartier");
   const [position,setPosition]=useState("");
-  const [dateNaissance,setDateNaissance]=useState("");
-  const [gpsStatus,setGpsStatus]=useState("idle"); // idle | loading | ok | error
+  const [jourNaissance,setJourNaissance]=useState("");
+  const [moisNaissance,setMoisNaissance]=useState("");
   const [err,setErr]=useState(""); const [loading,setLoading]=useState(false);
   const [tentatives,setTentatives]=useState(0); const [bloque,setBloque]=useState(false);
+  const isRTL = langue==="ar";
+
+  const cats = CATEGORIES_BOUTIQUE_TRANS[langue]||CATEGORIES_BOUTIQUE_TRANS.fr;
+  const isAutre = catIndex === cats.length-1;
+  const categorieValue = isAutre ? (catLibre||cats[catIndex]) : cats[catIndex];
+  const categorieFr = isAutre ? (catLibre||"Autre") : (CATEGORIES_BOUTIQUE_TRANS.fr[catIndex]||cats[catIndex]);
+
+  const MOIS = {
+    fr:["Janvier","Février","Mars","Avril","Mai","Juin","Juillet","Août","Septembre","Octobre","Novembre","Décembre"],
+    en:["January","February","March","April","May","June","July","August","September","October","November","December"],
+    ar:["يناير","فبراير","مارس","أبريل","مايو","يونيو","يوليو","أغسطس","سبتمبر","أكتوبر","نوفمبر","ديسمبر"],
+  };
 
   const connect = async () => {
     if(!tel||!pwd||bloque) return;
@@ -470,7 +525,7 @@ const Login = ({onLogin,t}) => {
         const cached=JSON.parse(localStorage.getItem("pg_known_users")||"[]");
         const found=cached.find(u=>u.telephone===tel);
         if(found){const r=await verifyPwd(pwd,found);if(r.ok){onLogin(found);return;}}
-        setErr("Hors ligne — connectez-vous d'abord avec internet");setLoading(false);return;
+        setErr(t.premiere_connexion);setLoading(false);return;
       }
       const snap=await getDocs(query(collection(db,"users"),where("telephone","==",tel)));
       if(snap.empty){handleEchec();return;}
@@ -479,7 +534,7 @@ const Login = ({onLogin,t}) => {
       const r=await verifyPwd(pwd,ud);
       if(!r.ok){handleEchec();return;}
       if(r.needsUpgrade){
-        try{const newSalt=genSalt();const newHash=await hashPwd(pwd,newSalt);await updateDoc(doc(db,"users",docId),{password:newHash,salt:newSalt});ud.password=newHash;ud.salt=newSalt;}catch(e){}
+        try{const ns=genSalt();const nh=await hashPwd(pwd,ns);await updateDoc(doc(db,"users",docId),{password:nh,salt:ns});ud.password=nh;ud.salt=ns;}catch(e){}
       }
       onLogin(ud);
     } catch(e){setErr("Erreur de connexion.");setLoading(false);}
@@ -487,8 +542,8 @@ const Login = ({onLogin,t}) => {
 
   const handleEchec = () => {
     const n=tentatives+1; setTentatives(n);
-    if(n>=5){setBloque(true);setErr("❌ Trop de tentatives. Réessayez dans 5 min.");setTimeout(()=>{setBloque(false);setTentatives(0);},300000);}
-    else setErr(`${t.motDePasseIncorrect} (${5-n} tentatives)`);
+    if(n>=5){setBloque(true);setErr("❌ 5 tentatives. Réessayez dans 5 min.");setTimeout(()=>{setBloque(false);setTentatives(0);},300000);}
+    else setErr(`${t.motDePasseIncorrect} (${5-n})`);
     setLoading(false);
   };
 
@@ -498,106 +553,130 @@ const Login = ({onLogin,t}) => {
     try {
       const snap=await getDocs(query(collection(db,"users"),where("telephone","==",tel)));
       if(!snap.empty){setErr("Ce numéro est déjà enregistré");setLoading(false);return;}
-      // GPS automatique
-      setGpsStatus("loading");
       let loc=null;
       if(navigator.geolocation){
-        try{
-          const p=await new Promise((r,j)=>navigator.geolocation.getCurrentPosition(r,j,{timeout:8000,enableHighAccuracy:true}));
-          loc={lat:p.coords.latitude,lng:p.coords.longitude,accuracy:Math.round(p.coords.accuracy)};
-          setGpsStatus("ok");
-        }catch(e){setGpsStatus("error");}
-      }else{setGpsStatus("error");}
-      const salt=genSalt();
-      const hashedPwd=await hashPwd(pwd,salt);
+        try{const p=await new Promise((r,j)=>navigator.geolocation.getCurrentPosition(r,j,{timeout:8000,enableHighAccuracy:true}));loc={lat:p.coords.latitude,lng:p.coords.longitude,accuracy:Math.round(p.coords.accuracy)};}catch(e){}
+      }
+      const salt=genSalt(); const hashedPwd=await hashPwd(pwd,salt);
       const fin=new Date(Date.now()+30*24*60*60*1000).toISOString();
       const ref=await addDoc(collection(db,"users"),{
         telephone:tel,password:hashedPwd,salt,
-        nomBoutique:nom,adresse:adr,
-        categorie,canal,position,
-        dateNaissance:dateNaissance||"",
-        localisation:loc,
-        role:"proprietaire",
+        nomBoutique:nom,nomProprietaire:nomProp,adresse:adr,
+        categorie:categorieFr,canal,position,
+        jourNaissance:jourNaissance||"",moisNaissance:moisNaissance||"",
+        localisation:loc,role:"proprietaire",
         plan:"essai",essaiDebut:new Date().toISOString(),essaiFin:fin,
         createdAt:serverTimestamp(),actif:true
       });
-      onLogin({id:ref.id,telephone:tel,nomBoutique:nom,adresse:adr,categorie,canal,position,dateNaissance,localisation:loc,role:"proprietaire",plan:"essai",essaiFin:fin});
+      onLogin({id:ref.id,telephone:tel,nomBoutique:nom,nomProprietaire:nomProp,adresse:adr,categorie:categorieFr,canal,position,jourNaissance,moisNaissance,localisation:loc,role:"proprietaire",plan:"essai",essaiFin:fin});
     } catch(e){setErr("Erreur: "+e.message);setLoading(false);}
   };
 
   const mdpOublie = () => {
-    if(!tel){setErr("Entrez d'abord votre numéro de téléphone");return;}
-    window.open(`https://wa.me/${WHATSAPP}?text=${encodeURIComponent(`Bonjour David 👋,\nJ'ai oublié mon mot de passe Lapia.\nMon numéro : ${tel}\nMerci de réinitialiser mon mot de passe.`)}`, "_blank");
+    if(!tel){setErr("Entrez d'abord votre numéro");return;}
+    window.open(`https://wa.me/${WHATSAPP}?text=${encodeURIComponent(`Bonjour David 👋,\nMot de passe oublié Lapia.\nNuméro : ${tel}`)}`, "_blank");
   };
 
-  const LBL = {display:"block",color:"#8891aa",fontSize:12,fontWeight:600,marginBottom:5,textTransform:"uppercase",letterSpacing:"0.06em"};
+  const LBL = {display:"block",color:"#8891aa",fontSize:12,fontWeight:600,marginBottom:5,textTransform:"uppercase",letterSpacing:"0.05em"};
 
   return (
-    <div style={{minHeight:"100vh",background:"#111520",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:24,fontFamily:"'Sora',sans-serif"}}>
-      <div style={{width:72,height:72,borderRadius:20,background:"linear-gradient(135deg,#00d97e,#00b360)",display:"flex",alignItems:"center",justifyContent:"center",fontWeight:800,color:"#fff",fontSize:30,marginBottom:20}}>L</div>
+    <div style={{minHeight:"100vh",background:"#111520",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:24,fontFamily:"'Sora',sans-serif",direction:isRTL?"rtl":"ltr"}}>
+
+      {/* Sélecteur de langue en haut */}
+      <div style={{display:"flex",gap:6,marginBottom:24}}>
+        {[{code:"fr",label:"Français"},{code:"en",label:"English"},{code:"ar",label:"العربية"}].map(l=>(
+          <button key={l.code} onClick={()=>setLangue(l.code)}
+            style={{background:langue===l.code?"#00d97e":"#1a1f2e",border:`1px solid ${langue===l.code?"#00d97e":"#252b3b"}`,borderRadius:8,padding:"5px 14px",color:langue===l.code?"#0d1117":"#8891aa",fontSize:13,fontWeight:700,cursor:"pointer"}}>
+            {l.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Logo */}
+      <div style={{width:72,height:72,borderRadius:20,background:"linear-gradient(135deg,#00d97e,#00b360)",display:"flex",alignItems:"center",justifyContent:"center",fontWeight:800,color:"#fff",fontSize:30,marginBottom:16}}>L</div>
       <div style={{color:"#f0f4ff",fontWeight:800,fontSize:28,marginBottom:6}}>Lapia</div>
-      <div style={{color:"#8891aa",fontSize:16,marginBottom:36}}>{t.connectezVous}</div>
-      <div style={{width:"100%",maxWidth:400}}>
-        <input type="tel" value={tel} onChange={e=>setTel(e.target.value)} placeholder="+235 XX XX XX XX" style={{...IS,marginBottom:12}}/>
-        <input type="password" value={pwd} onChange={e=>setPwd(e.target.value)} onKeyDown={e=>e.key==="Enter"&&(isInscription?inscrire():connect())} placeholder={t.motDePasse} style={{...IS,marginBottom:12}}/>
+      <div style={{color:"#8891aa",fontSize:15,marginBottom:28}}>{t.connectezVous}</div>
+
+      <div style={{width:"100%",maxWidth:420}}>
+        {/* Champs connexion */}
+        <input type="tel" value={tel} onChange={e=>setTel(e.target.value)} placeholder="+235 XX XX XX XX" style={{...IS,marginBottom:10,textAlign:isRTL?"right":"left"}}/>
+        <input type="password" value={pwd} onChange={e=>setPwd(e.target.value)} onKeyDown={e=>e.key==="Enter"&&(isInscription?inscrire():connect())} placeholder={t.motDePasse} style={{...IS,marginBottom:10,textAlign:isRTL?"right":"left"}}/>
 
         {isInscription&&<>
           {/* Nom boutique */}
-          <div style={{marginBottom:12}}>
-            <label style={LBL}>Nom de la boutique *</label>
-            <input value={nom} onChange={e=>setNom(e.target.value)} placeholder="Ex: Épicerie Al Amin" style={IS}/>
+          <div style={{marginBottom:10}}>
+            <label style={LBL}>{t.nomBoutique} *</label>
+            <input value={nom} onChange={e=>setNom(e.target.value)} placeholder={langue==="ar"?"مثال: بقالة الأمين":langue==="en"?"Ex: Al Amin Grocery":"Ex: Épicerie Al Amin"} style={IS}/>
           </div>
 
-          {/* Catégorie */}
-          <div style={{marginBottom:12}}>
-            <label style={LBL}>Catégorie de la boutique *</label>
-            <select value={categorie} onChange={e=>setCategorie(e.target.value)} style={IS}>
-              {CATEGORIES_BOUTIQUE.map(c=><option key={c} value={c}>{c}</option>)}
+          {/* Nom propriétaire */}
+          <div style={{marginBottom:10}}>
+            <label style={LBL}>{t.nomProprietaire}</label>
+            <input value={nomProp} onChange={e=>setNomProp(e.target.value)} placeholder={langue==="ar"?"اسم المالك / المدير":langue==="en"?"Owner or manager name":"Nom du propriétaire ou gérant"} style={IS}/>
+          </div>
+
+          {/* Catégorie boutique traduite */}
+          <div style={{marginBottom:10}}>
+            <label style={LBL}>{t.categorie} *</label>
+            <select value={catIndex} onChange={e=>setCatIndex(+e.target.value)} style={IS}>
+              {cats.map((c,i)=><option key={i} value={i}>{c}</option>)}
             </select>
+            {isAutre&&(
+              <input value={catLibre} onChange={e=>setCatLibre(e.target.value)} placeholder={t.categorieAutre} style={{...IS,marginTop:8}}/>
+            )}
           </div>
 
           {/* Canal + Position */}
-          <div style={{marginBottom:12}}>
-            <label style={LBL}>Emplacement *</label>
+          <div style={{marginBottom:10}}>
+            <label style={LBL}>{t.emplacement} *</label>
             <select value={canal} onChange={e=>setCanal(e.target.value)} style={{...IS,marginBottom:8}}>
               {CANAUX_BOUTIQUE.map(c=><option key={c} value={c}>{c}</option>)}
             </select>
-            <input value={position} onChange={e=>setPosition(e.target.value)} placeholder="Précision : nom du marché, N° stand, quartier..." style={IS}/>
+            <input value={position} onChange={e=>setPosition(e.target.value)} placeholder={t.precisionPosition} style={IS}/>
           </div>
 
-          {/* Adresse texte */}
-          <div style={{marginBottom:12}}>
-            <label style={LBL}>Adresse / Quartier</label>
-            <input value={adr} onChange={e=>setAdr(e.target.value)} placeholder="Ex: Quartier Moursal, N'Djamena" style={IS}/>
+          {/* Adresse */}
+          <div style={{marginBottom:10}}>
+            <label style={LBL}>{t.adresse}</label>
+            <input value={adr} onChange={e=>setAdr(e.target.value)} placeholder={langue==="ar"?"مثال: حي المورسال":"Ex: Quartier Moursal, N'Djamena"} style={IS}/>
           </div>
 
-          {/* Date de naissance propriétaire */}
-          <div style={{marginBottom:12}}>
-            <label style={LBL}>Date de naissance du propriétaire</label>
-            <input type="date" value={dateNaissance} onChange={e=>setDateNaissance(e.target.value)} style={{...IS,colorScheme:"dark"}}/>
-            <div style={{color:"#8891aa",fontSize:11,marginTop:4}}>🎂 Pour vous souhaiter un joyeux anniversaire</div>
-          </div>
-
-          {/* GPS status */}
-          <div style={{background:"rgba(0,217,126,0.08)",border:"1px solid rgba(0,217,126,0.2)",borderRadius:10,padding:"10px 14px",marginBottom:12}}>
-            <div style={{fontSize:13,color:"#8891aa",marginBottom:4}}>
-              📍 <strong style={{color:"#00d97e"}}>Géolocalisation GPS</strong> — automatique à la création
+          {/* Jour et mois de naissance */}
+          <div style={{marginBottom:10}}>
+            <label style={LBL}>{t.jourNaissance}</label>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+              <select value={jourNaissance} onChange={e=>setJourNaissance(e.target.value)} style={IS}>
+                <option value="">--</option>
+                {Array.from({length:31},(_,i)=>i+1).map(d=><option key={d} value={String(d).padStart(2,"0")}>{d}</option>)}
+              </select>
+              <select value={moisNaissance} onChange={e=>setMoisNaissance(e.target.value)} style={IS}>
+                <option value="">--</option>
+                {(MOIS[langue]||MOIS.fr).map((m,i)=><option key={i} value={String(i+1).padStart(2,"0")}>{m}</option>)}
+              </select>
             </div>
-            <div style={{fontSize:12,color:"#8891aa"}}>Votre position exacte sera enregistrée pour apparaître sur la carte admin.</div>
+            <div style={{color:"#8891aa",fontSize:11,marginTop:4}}>{t.anniversaireInfo}</div>
           </div>
 
-          <div style={{background:"rgba(0,217,126,0.08)",border:"1px solid rgba(0,217,126,0.2)",borderRadius:10,padding:"10px 14px",marginBottom:12,fontSize:14,color:"#8891aa"}}>
-            🎁 <strong style={{color:"#00d97e"}}>30 jours d'essai gratuit</strong> — Aucune carte bancaire requise
+          {/* GPS info */}
+          <div style={{background:"rgba(0,217,126,0.07)",border:"1px solid rgba(0,217,126,0.18)",borderRadius:10,padding:"9px 13px",marginBottom:10}}>
+            <div style={{fontSize:12,color:"#00d97e",fontWeight:700,marginBottom:3}}>📍 {t.geolocalisation}</div>
+            <div style={{fontSize:11,color:"#8891aa"}}>{t.geoAuto}</div>
+          </div>
+
+          {/* Essai gratuit */}
+          <div style={{background:"rgba(0,217,126,0.07)",border:"1px solid rgba(0,217,126,0.18)",borderRadius:10,padding:"9px 13px",marginBottom:10,fontSize:13,color:"#8891aa"}}>
+            🎁 <strong style={{color:"#00d97e"}}>{t.essaiGratuit}</strong>
           </div>
         </>}
 
-        {err&&<div style={{color:"#ff4757",fontSize:14,marginBottom:12,textAlign:"center",background:"rgba(255,71,87,0.1)",borderRadius:8,padding:"8px 12px"}}>{err}</div>}
+        {err&&<div style={{color:"#ff4757",fontSize:13,marginBottom:10,textAlign:"center",background:"rgba(255,71,87,0.1)",borderRadius:8,padding:"8px 12px"}}>{err}</div>}
+
         <button onClick={isInscription?inscrire:connect} disabled={loading||bloque}
-          style={{width:"100%",background:loading||bloque?"#555":"linear-gradient(135deg,#00d97e,#00b360)",border:"none",borderRadius:12,color:"#fff",padding:16,fontSize:18,fontWeight:700,cursor:loading||bloque?"not-allowed":"pointer",fontFamily:"'Sora',sans-serif",marginBottom:12}}>
+          style={{width:"100%",background:loading||bloque?"#555":"linear-gradient(135deg,#00d97e,#00b360)",border:"none",borderRadius:12,color:"#fff",padding:15,fontSize:17,fontWeight:700,cursor:loading||bloque?"not-allowed":"pointer",fontFamily:"'Sora',sans-serif",marginBottom:10}}>
           {loading?t.chargement:isInscription?t.creer_compte:t.seConnecter}
         </button>
-        {!isInscription&&<button onClick={mdpOublie} style={{width:"100%",background:"none",border:"none",color:"#7b8cff",fontSize:14,cursor:"pointer",fontFamily:"'Sora',sans-serif",marginBottom:8}}>🔐 {t.mdp_oublie}</button>}
-        <button onClick={()=>{setIsInscription(!isInscription);setErr("");}} style={{width:"100%",background:"none",border:"none",color:"#00d97e",fontSize:15,cursor:"pointer",fontFamily:"'Sora',sans-serif"}}>
+        {!isInscription&&<button onClick={mdpOublie} style={{width:"100%",background:"none",border:"none",color:"#7b8cff",fontSize:13,cursor:"pointer",fontFamily:"'Sora',sans-serif",marginBottom:6}}>🔐 {t.mdp_oublie}</button>}
+        <button onClick={()=>{setIsInscription(!isInscription);setErr("");}} style={{width:"100%",background:"none",border:"none",color:"#00d97e",fontSize:14,cursor:"pointer",fontFamily:"'Sora',sans-serif"}}>
           {isInscription?t.deja_compte:t.pas_compte}
         </button>
       </div>
@@ -1968,7 +2047,7 @@ const StockPage = ({produits,saveProduit,delProduit,t,nbProduits,lim,langue}) =>
   const [translating,setTranslating]=useState(false);
   const [f,setF]=useState({nom:"",categorie:"Alimentation",categorieLibre:"",prixAchat:"",prixVente:"",quantite:"",alerte:"5",datePeremption:""});
 
-  const CATS = ["Alimentation","Boisson","Médicaments","Ménager","Cosmétique","Électronique","Vêtements","Papeterie","Autre (préciser...)"];
+  const CATS = CATS_STOCK_TRANS[langue]||CATS_STOCK_TRANS.fr;
   const categorieAffichee = (p) => {
     if(p.translations?.categorie?.[langue]) return p.translations.categorie[langue];
     return p.categorieLibre||p.categorie||"";
@@ -2471,9 +2550,44 @@ export default function App() {
   const [langue,setLangue]=useState(()=>localStorage.getItem("lapia_langue")||"fr");
   const [user,setUser]=useState(()=>{try{const s=localStorage.getItem("lapia_user");return s?JSON.parse(s):null;}catch{return null;}});
   const t=T[langue];
-  const handleLogin=(ud)=>{localStorage.setItem("lapia_user",JSON.stringify(ud));const cached=JSON.parse(localStorage.getItem("pg_known_users")||"[]");const exists=cached.find(u=>u.telephone===ud.telephone);if(!exists){cached.push(ud);localStorage.setItem("pg_known_users",JSON.stringify(cached));}setUser(ud);};
+
+  // Favicon dynamique — logo Lapia "L" dans un cercle vert
+  useEffect(()=>{
+    try{
+      const canvas=document.createElement("canvas");
+      canvas.width=64;canvas.height=64;
+      const ctx=canvas.getContext("2d");
+      ctx.beginPath();ctx.arc(32,32,32,0,Math.PI*2);
+      ctx.fillStyle="#00d97e";ctx.fill();
+      ctx.fillStyle="#fff";ctx.font="bold 36px Arial";
+      ctx.textAlign="center";ctx.textBaseline="middle";
+      ctx.fillText("L",32,34);
+      let link=document.querySelector("link[rel~='icon']");
+      if(!link){link=document.createElement("link");link.rel="icon";document.head.appendChild(link);}
+      link.href=canvas.toDataURL();
+      document.title="Lapia";
+    }catch(e){}
+  },[]);
+
+  // Persister la langue choisie
+  useEffect(()=>{
+    localStorage.setItem("lapia_langue",langue);
+    document.documentElement.dir=langue==="ar"?"rtl":"ltr";
+    document.documentElement.lang=langue;
+  },[langue]);
+
+  const setLanguePersist=(l)=>{setLangue(l);};
+
+  const handleLogin=(ud)=>{
+    localStorage.setItem("lapia_user",JSON.stringify(ud));
+    const cached=JSON.parse(localStorage.getItem("pg_known_users")||"[]");
+    const exists=cached.find(u=>u.telephone===ud.telephone);
+    if(!exists){cached.push(ud);localStorage.setItem("pg_known_users",JSON.stringify(cached));}
+    setUser(ud);
+  };
   const handleLogout=()=>{localStorage.removeItem("lapia_user");setUser(null);};
-  if(!user)return<Login onLogin={handleLogin} t={t}/>;
-  if(user.role==="admin")return<AdminDashboard user={user} onLogout={handleLogout} t={t} langue={langue} setLangue={setLangue}/>;
-  return<AppBoutique user={user} onLogout={handleLogout} t={t} langue={langue} setLangue={setLangue}/>;
+
+  if(!user) return <Login onLogin={handleLogin} t={t} langue={langue} setLangue={setLanguePersist}/>;
+  if(user.role==="admin") return <AdminDashboard user={user} onLogout={handleLogout} t={t} langue={langue} setLangue={setLanguePersist}/>;
+  return <AppBoutique user={user} onLogout={handleLogout} t={t} langue={langue} setLangue={setLanguePersist}/>;
 }
