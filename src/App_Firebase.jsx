@@ -1021,6 +1021,19 @@ const AdminDashboard = ({user, onLogout, t, langue, setLangue}) => {
           });
           const topProd = Object.entries(parProd).sort((a,b)=>b[1].ca-a[1].ca).slice(0,10);
 
+          // Modes de paiement
+          const parMode = {cash:{ca:0,nb:0},mobile:{ca:0,nb:0},cheque:{ca:0,nb:0},credit:{ca:0,nb:0}};
+          vp.forEach(v=>{
+            const m = v.mode||"cash";
+            if(parMode[m]){ parMode[m].ca+=v.montant||0; parMode[m].nb+=1; }
+          });
+          const modeList = [
+            {key:"cash",   label:"💵 Cash",         col:"#00d97e"},
+            {key:"mobile", label:"📱 Mobile Money", col:"#7b8cff"},
+            {key:"cheque", label:"🏦 Chèque",        col:"#ffd93d"},
+            {key:"credit", label:"📋 Crédit",        col:"#ff6b6b"},
+          ];
+
           // Par boutique
           const parBoutique = boutiques.map(b=>{
             const vb = vp.filter(v=>v.boutiqueId===b.id);
@@ -1076,6 +1089,8 @@ const AdminDashboard = ({user, onLogout, t, langue, setLangue}) => {
                     const panierMoyen = nbV>0?Math.round(ca/nbV):0;
                     const boutiquesPro = boutiques.filter(b=>b.plan==="pro"||b.plan==="business").length;
                     const tauxPro = boutiques.length>0?Math.round((boutiquesPro/boutiques.length)*100):0;
+                    const modeTopKey = modeList.reduce((a,b)=>parMode[a.key].nb>parMode[b.key].nb?a:b).key;
+                    const modeTopLabel = modeList.find(m=>m.key===modeTopKey)?.label||"";
 
                     const w = window.open("","_blank","width=900,height=700");
                     w.document.write(`<!DOCTYPE html><html lang="fr"><head>
@@ -1131,6 +1146,44 @@ const AdminDashboard = ({user, onLogout, t, langue, setLangue}) => {
                       <div class="kpi" style="border-color:#9c27b0"><div class="kpi-val" style="color:#6a1b9a">${nbV}</div><div class="kpi-lbl">Transactions enregistrées</div></div>
                     </div>
 
+                    <div class="section">
+                      <h2>💳 Modes de paiement utilisés</h2>
+                      <table>
+                        <thead><tr><th>Mode</th><th style="text-align:center">Transactions</th><th style="text-align:center">Part</th><th>Volume</th><th>Part CA</th></tr></thead>
+                        <tbody>
+                          ${modeList.map(m=>{
+                            const d=parMode[m.key];
+                            const pctNb=nbV>0?Math.round((d.nb/nbV)*100):0;
+                            const pctCa=ca>0?Math.round((d.ca/ca)*100):0;
+                            const mCols={cash:"#00796b",mobile:"#4527a0",cheque:"#e65100",credit:"#b71c1c"};
+                            return `<tr>
+                              <td style="font-weight:700;color:${mCols[m.key]}">${m.label}</td>
+                              <td style="text-align:center;font-weight:700">${d.nb}</td>
+                              <td style="text-align:center">
+                                <div style="display:flex;align-items:center;gap:8px;justify-content:center">
+                                  <div style="width:${Math.max(pctNb,1)*1.2}px;height:8px;background:${mCols[m.key]};border-radius:4px"></div>
+                                  <span style="font-weight:700">${pctNb}%</span>
+                                </div>
+                              </td>
+                              <td style="font-weight:600">${fmt(d.ca)}</td>
+                              <td style="font-weight:700;color:${mCols[m.key]}">${pctCa}%</td>
+                            </tr>`;
+                          }).join("")}
+                        </tbody>
+                        <tfoot><tr class="tfoot">
+                          <td>TOTAL</td>
+                          <td style="text-align:center">${nbV}</td>
+                          <td style="text-align:center">100%</td>
+                          <td>${fmt(ca)}</td>
+                          <td>100%</td>
+                        </tr></tfoot>
+                      </table>
+                      ${parMode.mobile.nb>0?`
+                      <div style="margin-top:14px;background:#ede7f6;border-left:4px solid #7b3fe4;padding:12px 16px;border-radius:0 8px 8px 0;font-size:12px">
+                        <strong>📱 Signal Mobile Money :</strong> ${Math.round((parMode.mobile.nb/Math.max(nbV,1))*100)}% des transactions (${parMode.mobile.nb}) sont déjà réalisées via Mobile Money, représentant ${fmt(parMode.mobile.ca)} de volume — ce qui justifie une intégration native prioritaire.
+                      </div>`:""}
+                    </div>
+
                     <div class="grid2">
                       <div class="section">
                         <h2>🏪 Volume par catégorie de commerce</h2>
@@ -1165,6 +1218,7 @@ const AdminDashboard = ({user, onLogout, t, langue, setLangue}) => {
                       ${topProd.length>0?`<div class="insight"><strong>Produit le plus vendu :</strong> "${topProd[0][0]}" génère ${ca>0?Math.round((topProd[0][1].ca/ca)*100):0}% du chiffre d'affaires total de la période.</div>`:""}
                       <div class="insight"><strong>Recouvrement :</strong> ${tauxRecouvrement}% des transactions sont encaissées immédiatement. ${100-tauxRecouvrement}% passent par du crédit client (${fmt(det)} en attente).</div>
                       <div class="insight"><strong>Taux de digitalisation Pro :</strong> ${tauxPro}% des établissements (${boutiquesPro}/${boutiques.length}) utilisent un plan payant, indiquant une adoption solide du service premium.</div>
+                      <div class="insight"><strong>Mode de paiement dominant :</strong> ${modeTopLabel} est le mode le plus utilisé avec ${nbV>0?Math.round((parMode[modeTopKey].nb/nbV)*100):0}% des transactions (${parMode[modeTopKey].nb} transactions · ${fmt(parMode[modeTopKey].ca)}).</div>
                     </div>
 
                     <div class="section">
@@ -1224,6 +1278,38 @@ const AdminDashboard = ({user, onLogout, t, langue, setLangue}) => {
                     <div style={{color:k.col,fontWeight:800,fontSize:20}}>{k.value}</div>
                   </div>
                 ))}
+              </div>
+
+              {/* Modes de paiement */}
+              <div style={{background:"#1a1f2e",borderRadius:16,padding:20,marginBottom:24}}>
+                <div style={{color:"#f0f4ff",fontWeight:700,fontSize:16,marginBottom:16}}>💳 Modes de paiement utilisés</div>
+                <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12,marginBottom:16}}>
+                  {modeList.map(m=>{
+                    const d=parMode[m.key];
+                    const pct=nbV>0?Math.round((d.nb/nbV)*100):0;
+                    return(
+                      <div key={m.key} style={{background:"#252b3b",borderRadius:12,padding:14,border:`1px solid ${m.col}33`}}>
+                        <div style={{color:m.col,fontWeight:800,fontSize:20,marginBottom:2}}>{pct}%</div>
+                        <div style={{color:"#f0f4ff",fontSize:13,fontWeight:600,marginBottom:4}}>{m.label}</div>
+                        <div style={{color:"#8891aa",fontSize:11}}>{d.nb} transaction(s)</div>
+                        <div style={{color:"#8891aa",fontSize:11}}>{fmt(d.ca)}</div>
+                      </div>
+                    );
+                  })}
+                </div>
+                {/* Barre comparative */}
+                <div style={{height:10,background:"#252b3b",borderRadius:99,overflow:"hidden",display:"flex"}}>
+                  {modeList.map(m=>{
+                    const pct=nbV>0?(parMode[m.key].nb/nbV)*100:0;
+                    return pct>0?<div key={m.key} style={{width:`${pct}%`,background:m.col,transition:"width 0.4s"}} title={`${m.label} : ${Math.round(pct)}%`}/>:null;
+                  })}
+                </div>
+                {/* Insight Mobile Money */}
+                {parMode.mobile.nb>0&&(
+                  <div style={{background:"rgba(123,140,255,0.08)",border:"1px solid rgba(123,140,255,0.2)",borderRadius:10,padding:"10px 14px",marginTop:12}}>
+                    <span style={{color:"#7b8cff",fontSize:13}}>📱 <strong>{Math.round((parMode.mobile.nb/Math.max(nbV,1))*100)}%</strong> des transactions utilisent déjà le Mobile Money — signal fort pour l'intégration native.</span>
+                  </div>
+                )}
               </div>
 
               {/* Graphique évolution annuelle */}
