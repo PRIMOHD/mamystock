@@ -703,7 +703,7 @@ const AdminDashboard = ({user, onLogout, t, langue, setLangue}) => {
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth());
   const [selectedQuarter, setSelectedQuarter] = useState(Math.floor(new Date().getMonth()/3));
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
-  const [activeTab, setActiveTab] = useState("bilans"); // "bilans" | "carte"
+  const [activeTab, setActiveTab] = useState("bilans"); // "bilans" | "carte" | "global"
   const [mapReady, setMapReady] = useState(false);
   const mapRef = useRef(null);
   const mapInstanceRef = useRef(null);
@@ -968,7 +968,7 @@ const AdminDashboard = ({user, onLogout, t, langue, setLangue}) => {
 
         {/* ONGLETS */}
         <div style={{display:"flex",gap:8,marginBottom:24}}>
-          {[{id:"bilans",label:"📊 Bilans & Rapports"},{id:"carte",label:"🗺️ Carte des boutiques"}].map(tab=>(
+          {[{id:"bilans",label:"📊 Bilans & Rapports"},{id:"global",label:"📈 Rapport Global"},{id:"carte",label:"🗺️ Carte des boutiques"}].map(tab=>(
             <button key={tab.id} onClick={()=>setActiveTab(tab.id)}
               style={{background:activeTab===tab.id?"linear-gradient(135deg,#00d97e,#00b360)":"#1a1f2e",border:"none",borderRadius:10,padding:"10px 20px",color:activeTab===tab.id?"#fff":"#8891aa",fontSize:14,fontWeight:700,cursor:"pointer",fontFamily:"'Sora',sans-serif",boxShadow:activeTab===tab.id?"0 4px 14px rgba(0,217,126,0.3)":"none"}}>
               {tab.label}
@@ -976,7 +976,394 @@ const AdminDashboard = ({user, onLogout, t, langue, setLangue}) => {
           ))}
         </div>
 
-        {/* ONGLET CARTE */}
+        {/* ── ONGLET RAPPORT GLOBAL ── */}
+        {activeTab==="global"&&(()=>{
+          // Sélecteurs période (réutilise les states existants)
+          const now = new Date();
+          const getVentesPlateforme = () => {
+            if(periodType==="mensuel")
+              return ventes.filter(v=>{const d=getDate(v);return d.getMonth()===selectedMonth&&d.getFullYear()===selectedYear;});
+            if(periodType==="trimestriel"){
+              const debut=selectedQuarter*3;
+              return ventes.filter(v=>{const d=getDate(v);return d.getMonth()>=debut&&d.getMonth()<debut+3&&d.getFullYear()===selectedYear;});
+            }
+            return ventes.filter(v=>getDate(v).getFullYear()===selectedYear);
+          };
+          const vp = getVentesPlateforme();
+
+          // Stats globales
+          const ca   = vp.reduce((s,v)=>s+(v.montant||0),0);
+          const enc  = vp.reduce((s,v)=>s+(v.paye||0),0);
+          const det  = vp.reduce((s,v)=>s+((v.montant||0)-(v.paye||0)),0);
+          const nbV  = vp.length;
+
+          // Par catégorie de boutique
+          const parCat = {};
+          vp.forEach(v=>{
+            const b = boutiques.find(b=>b.id===v.boutiqueId);
+            const cat = b?.categorie||"Non classé";
+            if(!parCat[cat]) parCat[cat]={ca:0,enc:0,nb:0,boutiques:new Set()};
+            parCat[cat].ca  += v.montant||0;
+            parCat[cat].enc += v.paye||0;
+            parCat[cat].nb  += 1;
+            parCat[cat].boutiques.add(v.boutiqueId);
+          });
+          const catList = Object.entries(parCat).sort((a,b)=>b[1].ca-a[1].ca);
+
+          // Top produits toutes boutiques
+          const parProd = {};
+          vp.forEach(v=>{
+            const nom = v.produit||"Inconnu";
+            if(!parProd[nom]) parProd[nom]={ca:0,qte:0,nb:0};
+            parProd[nom].ca  += v.montant||0;
+            parProd[nom].qte += v.quantite||0;
+            parProd[nom].nb  += 1;
+          });
+          const topProd = Object.entries(parProd).sort((a,b)=>b[1].ca-a[1].ca).slice(0,10);
+
+          // Par boutique
+          const parBoutique = boutiques.map(b=>{
+            const vb = vp.filter(v=>v.boutiqueId===b.id);
+            return {...b, ca:vb.reduce((s,v)=>s+(v.montant||0),0), nb:vb.length, enc:vb.reduce((s,v)=>s+(v.paye||0),0)};
+          }).sort((a,b)=>b.ca-a.ca);
+
+          // Évolution mensuelle/trimestrielle pour graphique
+          const evoData = periodType==="annuel" ? ta.mois.map((m,i)=>{
+            const vM=ventes.filter(v=>{const d=getDate(v);return d.getMonth()===i&&d.getFullYear()===selectedYear;});
+            return {label:m.slice(0,3), ca:vM.reduce((s,v)=>s+(v.montant||0),0), enc:vM.reduce((s,v)=>s+(v.paye||0),0)};
+          }) : [];
+          const maxEvo = Math.max(...evoData.map(d=>d.ca),1);
+
+          const COLS = ["#00d97e","#7b8cff","#ffd93d","#ff9f43","#ff6b6b","#26de81","#45aaf2","#fd9644","#a55eea","#4ecdc4"];
+
+          return(
+            <div>
+              {/* Header + sélecteurs */}
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:24,flexWrap:"wrap",gap:12}}>
+                <div>
+                  <h2 style={{margin:0,color:"#f0f4ff",fontSize:22,fontWeight:800}}>📈 Rapport Global Plateforme</h2>
+                  <div style={{color:"#8891aa",fontSize:13,marginTop:4}}>{boutiques.length} boutiques · {ta[periodType==="mensuel"?"mensuel":periodType==="trimestriel"?"trimestriel":"annuel"]} {periodType==="mensuel"?ta.mois[selectedMonth]:periodType==="trimestriel"?ta.trimestres[selectedQuarter]:""} {selectedYear}</div>
+                </div>
+                <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
+                  {["mensuel","trimestriel","annuel"].map(p=>(
+                    <button key={p} onClick={()=>setPeriodType(p)}
+                      style={{background:periodType===p?"#00d97e":"#1a1f2e",border:"none",borderRadius:8,padding:"6px 14px",color:periodType===p?"#0d1117":"#8891aa",fontSize:13,fontWeight:700,cursor:"pointer"}}>
+                      {p==="mensuel"?"Mensuel":p==="trimestriel"?"Trimestriel":"Annuel"}
+                    </button>
+                  ))}
+                  <select value={selectedYear} onChange={e=>setSelectedYear(+e.target.value)}
+                    style={{background:"#1a1f2e",border:"1px solid #252b3b",borderRadius:8,padding:"6px 12px",color:"#f0f4ff",fontSize:13}}>
+                    {[now.getFullYear()-1,now.getFullYear()].map(y=><option key={y} value={y}>{y}</option>)}
+                  </select>
+                  {periodType==="mensuel"&&<select value={selectedMonth} onChange={e=>setSelectedMonth(+e.target.value)}
+                    style={{background:"#1a1f2e",border:"1px solid #252b3b",borderRadius:8,padding:"6px 12px",color:"#f0f4ff",fontSize:13}}>
+                    {ta.mois.map((m,i)=><option key={i} value={i}>{m}</option>)}
+                  </select>}
+                  {periodType==="trimestriel"&&<select value={selectedQuarter} onChange={e=>setSelectedQuarter(+e.target.value)}
+                    style={{background:"#1a1f2e",border:"1px solid #252b3b",borderRadius:8,padding:"6px 12px",color:"#f0f4ff",fontSize:13}}>
+                    {ta.trimestres.map((q,i)=><option key={i} value={i}>{q}</option>)}
+                  </select>}
+
+                  {/* Bouton impression BI */}
+                  <button onClick={()=>{
+                    const periodeLabel = periodType==="mensuel"?ta.mois[selectedMonth]:periodType==="trimestriel"?ta.trimestres[selectedQuarter]:`Année ${selectedYear}`;
+                    const genereLe = new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"long",year:"numeric",hour:"2-digit",minute:"2-digit"});
+
+                    // Calcul scores BI
+                    const topCatList = catList.slice(0,5);
+                    const topProdList = topProd.slice(0,5);
+                    const tauxRecouvrement = ca>0?Math.round((enc/ca)*100):0;
+                    const panierMoyen = nbV>0?Math.round(ca/nbV):0;
+                    const boutiquesPro = boutiques.filter(b=>b.plan==="pro"||b.plan==="business").length;
+                    const tauxPro = boutiques.length>0?Math.round((boutiquesPro/boutiques.length)*100):0;
+
+                    const w = window.open("","_blank","width=900,height=700");
+                    w.document.write(`<!DOCTYPE html><html lang="fr"><head>
+                    <meta charset="UTF-8"/>
+                    <title>Lapia BI — ${periodeLabel} ${selectedYear}</title>
+                    <style>
+                      *{box-sizing:border-box;margin:0;padding:0}
+                      body{font-family:'Segoe UI',Arial,sans-serif;background:#f8f9fb;color:#1a1a2e;padding:32px}
+                      .cover{background:linear-gradient(135deg,#0d1117,#1a1f2e);color:#fff;padding:40px;border-radius:16px;margin-bottom:32px;position:relative;overflow:hidden}
+                      .cover::before{content:'';position:absolute;top:-40px;right:-40px;width:200px;height:200px;border-radius:50%;background:rgba(0,217,126,0.12)}
+                      .logo{width:52px;height:52px;border-radius:12px;background:linear-gradient(135deg,#00d97e,#00b360);display:flex;align-items:center;justify-content:center;font-weight:900;font-size:22px;color:#fff;margin-bottom:16px}
+                      h1{font-size:26px;font-weight:800;color:#fff;margin-bottom:4px}
+                      .subtitle{color:#7d8590;font-size:14px}
+                      .tag{display:inline-block;background:rgba(0,217,126,0.15);border:1px solid rgba(0,217,126,0.3);color:#00d97e;border-radius:20px;padding:4px 14px;font-size:12px;font-weight:700;margin-top:12px}
+                      .anon{color:#ff9f43;font-size:11px;margin-top:8px;font-style:italic}
+                      .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:28px}
+                      .kpi{background:#fff;border-radius:12px;padding:20px;box-shadow:0 2px 8px rgba(0,0,0,0.06);border-left:4px solid}
+                      .kpi-val{font-size:22px;font-weight:800;margin-bottom:4px}
+                      .kpi-lbl{font-size:12px;color:#888;text-transform:uppercase;font-weight:600}
+                      .section{background:#fff;border-radius:12px;padding:24px;margin-bottom:24px;box-shadow:0 2px 8px rgba(0,0,0,0.05)}
+                      h2{font-size:16px;font-weight:700;color:#1a1a2e;margin-bottom:18px;padding-bottom:10px;border-bottom:2px solid #f0f0f0}
+                      .bar-row{margin-bottom:14px}
+                      .bar-meta{display:flex;justify-content:space-between;margin-bottom:5px;font-size:13px}
+                      .bar-name{font-weight:600;color:#1a1a2e}
+                      .bar-val{font-weight:700}
+                      .bar-bg{height:8px;background:#f0f2f5;border-radius:99px}
+                      .bar-fill{height:100%;border-radius:99px}
+                      .insight{background:#f0fdf7;border-left:4px solid #00d97e;padding:14px 18px;border-radius:0 10px 10px 0;margin-bottom:12px}
+                      .insight strong{color:#00796b}
+                      table{width:100%;border-collapse:collapse;font-size:13px}
+                      th{text-align:left;padding:10px 12px;font-size:11px;font-weight:700;text-transform:uppercase;color:#888;border-bottom:2px solid #f0f0f0}
+                      td{padding:10px 12px;border-bottom:1px solid #f8f8f8}
+                      tr:last-child td{border-bottom:none}
+                      .badge{display:inline-block;border-radius:4px;padding:2px 8px;font-size:11px;font-weight:700}
+                      .tfoot td{font-weight:800;background:#f8fdf9;border-top:2px solid #00d97e}
+                      .grid2{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:24px}
+                      .disclaimer{background:#fffbeb;border:1px solid #f0d060;border-radius:10px;padding:14px 18px;margin-top:28px;font-size:12px;color:#7a6000}
+                      @media print{body{padding:0}@page{margin:20mm}}
+                    </style></head><body>
+
+                    <div class="cover">
+                      <div class="logo">L</div>
+                      <h1>Rapport Business Intelligence</h1>
+                      <div class="subtitle">Analyse consolidée du commerce de détail informel</div>
+                      <div class="tag">📈 ${periodeLabel} ${selectedYear}</div>
+                      <div class="anon">⚠️ Document anonymisé — aucune donnée personnelle identifiable · Généré le ${genereLe}</div>
+                    </div>
+
+                    <div class="kpis">
+                      <div class="kpi" style="border-color:#00d97e"><div class="kpi-val" style="color:#00796b">${fmt(ca)}</div><div class="kpi-lbl">Volume d'affaires total</div></div>
+                      <div class="kpi" style="border-color:#2196f3"><div class="kpi-val" style="color:#1565c0">${tauxRecouvrement}%</div><div class="kpi-lbl">Taux de recouvrement</div></div>
+                      <div class="kpi" style="border-color:#ff9800"><div class="kpi-val" style="color:#e65100">${fmt(panierMoyen)}</div><div class="kpi-lbl">Panier moyen / transaction</div></div>
+                      <div class="kpi" style="border-color:#9c27b0"><div class="kpi-val" style="color:#6a1b9a">${nbV}</div><div class="kpi-lbl">Transactions enregistrées</div></div>
+                    </div>
+
+                    <div class="grid2">
+                      <div class="section">
+                        <h2>🏪 Volume par catégorie de commerce</h2>
+                        ${catList.slice(0,6).map(([cat,d],i)=>{
+                          const pct=ca>0?Math.round((d.ca/ca)*100):0;
+                          const cols=["#00d97e","#2196f3","#ff9800","#9c27b0","#f44336","#26a69a"];
+                          return `<div class="bar-row">
+                            <div class="bar-meta"><span class="bar-name">${cat}</span><span class="bar-val" style="color:${cols[i%cols.length]}">${fmt(d.ca)} (${pct}%)</span></div>
+                            <div class="bar-bg"><div class="bar-fill" style="width:${pct}%;background:${cols[i%cols.length]}"></div></div>
+                            <div style="font-size:11px;color:#888;margin-top:3px">${d.boutiques.size} établissement(s) · ${d.nb} transaction(s)</div>
+                          </div>`;
+                        }).join("")}
+                      </div>
+
+                      <div class="section">
+                        <h2>🏆 Produits les plus demandés</h2>
+                        ${topProdList.map(([nom,d],i)=>{
+                          const pct=topProd[0]?Math.round((d.ca/topProd[0][1].ca)*100):0;
+                          const cols=["#00d97e","#2196f3","#ff9800","#9c27b0","#f44336"];
+                          return `<div class="bar-row">
+                            <div class="bar-meta"><span class="bar-name">#${i+1} ${nom}</span><span class="bar-val" style="color:${cols[i%cols.length]}">${fmt(d.ca)}</span></div>
+                            <div class="bar-bg"><div class="bar-fill" style="width:${pct}%;background:${cols[i%cols.length]}"></div></div>
+                            <div style="font-size:11px;color:#888;margin-top:3px">${d.nb} vente(s)</div>
+                          </div>`;
+                        }).join("")}
+                      </div>
+                    </div>
+
+                    <div class="section">
+                      <h2>💡 Insights clés</h2>
+                      ${catList.length>0?`<div class="insight"><strong>Catégorie dominante :</strong> "${catList[0][0]}" représente ${ca>0?Math.round((catList[0][1].ca/ca)*100):0}% du volume d'affaires de la plateforme sur la période.</div>`:""}
+                      ${topProd.length>0?`<div class="insight"><strong>Produit le plus vendu :</strong> "${topProd[0][0]}" génère ${ca>0?Math.round((topProd[0][1].ca/ca)*100):0}% du chiffre d'affaires total de la période.</div>`:""}
+                      <div class="insight"><strong>Recouvrement :</strong> ${tauxRecouvrement}% des transactions sont encaissées immédiatement. ${100-tauxRecouvrement}% passent par du crédit client (${fmt(det)} en attente).</div>
+                      <div class="insight"><strong>Taux de digitalisation Pro :</strong> ${tauxPro}% des établissements (${boutiquesPro}/${boutiques.length}) utilisent un plan payant, indiquant une adoption solide du service premium.</div>
+                    </div>
+
+                    <div class="section">
+                      <h2>📋 Synthèse par catégorie</h2>
+                      <table>
+                        <thead><tr><th>Catégorie</th><th>Établissements</th><th>Transactions</th><th>Volume total</th><th>Encaissé</th><th>Crédit en cours</th><th>Part marché</th></tr></thead>
+                        <tbody>
+                          ${catList.map(([cat,d])=>`
+                            <tr>
+                              <td style="font-weight:600">${cat}</td>
+                              <td style="text-align:center">${d.boutiques.size}</td>
+                              <td style="text-align:center">${d.nb}</td>
+                              <td style="font-weight:700">${fmt(d.ca)}</td>
+                              <td style="color:#00796b;font-weight:600">${fmt(d.enc)}</td>
+                              <td style="color:#e65100">${fmt(d.ca-d.enc)}</td>
+                              <td style="font-weight:700">${ca>0?Math.round((d.ca/ca)*100):0}%</td>
+                            </tr>`).join("")}
+                        </tbody>
+                        <tfoot><tr class="tfoot">
+                          <td>TOTAL</td>
+                          <td style="text-align:center">${boutiques.length}</td>
+                          <td style="text-align:center">${nbV}</td>
+                          <td>${fmt(ca)}</td>
+                          <td style="color:#00796b">${fmt(enc)}</td>
+                          <td style="color:#e65100">${fmt(det)}</td>
+                          <td>100%</td>
+                        </tr></tfoot>
+                      </table>
+                    </div>
+
+                    <div class="disclaimer">
+                      <strong>📋 Note de confidentialité et d'anonymisation</strong><br/>
+                      Ce rapport ne contient aucune information personnelle identifiable. Les noms de boutiques, numéros de téléphone et adresses ont été exclus. Les données sont présentées de manière agrégée par catégorie d'activité. Ce document est destiné à un usage de business intelligence et d'analyse de marché uniquement.<br/><br/>
+                      <strong>Source :</strong> Plateforme Lapia — lapiagest.vercel.app · <strong>Période :</strong> ${periodeLabel} ${selectedYear} · <strong>Généré le :</strong> ${genereLe}
+                    </div>
+
+                    <script>window.onload=()=>{window.print();}</script>
+                    </body></html>`);
+                    w.document.close();
+                  }}
+                  style={{background:"linear-gradient(135deg,#00d97e,#00b360)",border:"none",borderRadius:10,padding:"8px 18px",color:"#fff",fontSize:13,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",gap:6,boxShadow:"0 4px 14px rgba(0,217,126,0.3)"}}>
+                    🖨️ Imprimer BI
+                  </button>
+                </div>
+              </div>
+
+              {/* KPIs globaux */}
+              <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12,marginBottom:24}}>
+                {[
+                  {label:"CA Total",value:fmt(ca),col:"#f0f4ff",bg:"rgba(255,255,255,0.05)"},
+                  {label:"Encaissé",value:fmt(enc),col:"#00d97e",bg:"rgba(0,217,126,0.1)"},
+                  {label:"Dettes",value:fmt(det),col:"#ff6b6b",bg:"rgba(255,107,107,0.1)"},
+                  {label:"Transactions",value:nbV,col:"#7b8cff",bg:"rgba(123,140,255,0.1)"},
+                ].map(k=>(
+                  <div key={k.label} style={{background:k.bg,border:`1px solid ${k.col}22`,borderRadius:14,padding:16}}>
+                    <div style={{color:"#8891aa",fontSize:11,fontWeight:600,textTransform:"uppercase",marginBottom:6}}>{k.label}</div>
+                    <div style={{color:k.col,fontWeight:800,fontSize:20}}>{k.value}</div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Graphique évolution annuelle */}
+              {periodType==="annuel"&&evoData.length>0&&(
+                <div style={{background:"#1a1f2e",borderRadius:16,padding:20,marginBottom:24}}>
+                  <div style={{color:"#f0f4ff",fontWeight:700,fontSize:16,marginBottom:16}}>📈 Évolution mensuelle {selectedYear}</div>
+                  <div style={{display:"flex",gap:4,alignItems:"flex-end",height:140}}>
+                    {evoData.map((d,i)=>{
+                      const hCA  = Math.round((d.ca/maxEvo)*130)||1;
+                      const hEnc = Math.round((d.enc/maxEvo)*130)||1;
+                      const isCur = i===now.getMonth()&&selectedYear===now.getFullYear();
+                      return(
+                        <div key={i} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:2}}>
+                          <div style={{fontSize:9,color:"#00d97e",fontWeight:700}}>{d.ca>0?`${Math.round(d.ca/1000)}k`:""}</div>
+                          <div style={{display:"flex",gap:1,alignItems:"flex-end",height:130}}>
+                            <div style={{width:10,height:hCA,background:isCur?"#00d97e":"#2a3a4a",borderRadius:"2px 2px 0 0"}}/>
+                            <div style={{width:10,height:hEnc,background:isCur?"rgba(0,217,126,0.35)":"rgba(123,140,255,0.35)",borderRadius:"2px 2px 0 0"}}/>
+                          </div>
+                          <div style={{fontSize:9,color:isCur?"#00d97e":"#8891aa",fontWeight:isCur?700:400}}>{d.label}</div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <div style={{display:"flex",gap:16,marginTop:8,justifyContent:"center"}}>
+                    <div style={{display:"flex",alignItems:"center",gap:5}}><div style={{width:10,height:10,background:"#2a3a4a",borderRadius:2}}/><span style={{color:"#8891aa",fontSize:11}}>CA</span></div>
+                    <div style={{display:"flex",alignItems:"center",gap:5}}><div style={{width:10,height:10,background:"rgba(123,140,255,0.35)",borderRadius:2}}/><span style={{color:"#8891aa",fontSize:11}}>Encaissé</span></div>
+                  </div>
+                </div>
+              )}
+
+              {/* Par catégorie de boutique */}
+              <div style={{background:"#1a1f2e",borderRadius:16,padding:20,marginBottom:24}}>
+                <div style={{color:"#f0f4ff",fontWeight:700,fontSize:16,marginBottom:16}}>🏪 Performance par catégorie de boutique</div>
+                {catList.length===0
+                  ?<div style={{color:"#8891aa",textAlign:"center",padding:20,fontSize:14}}>Aucune vente sur cette période</div>
+                  :catList.map(([cat,d],i)=>{
+                    const pct = ca>0?Math.round((d.ca/ca)*100):0;
+                    return(
+                      <div key={cat} style={{marginBottom:16}}>
+                        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
+                          <div>
+                            <span style={{color:"#f0f4ff",fontWeight:600,fontSize:14}}>{cat}</span>
+                            <span style={{color:"#8891aa",fontSize:12,marginLeft:8}}>{d.boutiques.size} boutique(s) · {d.nb} ventes</span>
+                          </div>
+                          <div style={{textAlign:"right"}}>
+                            <span style={{color:COLS[i%COLS.length],fontWeight:700,fontSize:14}}>{fmt(d.ca)}</span>
+                            <span style={{color:"#8891aa",fontSize:12,marginLeft:8}}>{pct}%</span>
+                          </div>
+                        </div>
+                        <div style={{height:6,background:"#252b3b",borderRadius:99}}>
+                          <div style={{height:"100%",width:`${pct}%`,background:COLS[i%COLS.length],borderRadius:99,transition:"width 0.4s"}}/>
+                        </div>
+                        <div style={{display:"flex",gap:16,marginTop:3}}>
+                          <span style={{color:"#00d97e",fontSize:11}}>Encaissé: {fmt(d.enc)}</span>
+                          <span style={{color:"#ff6b6b",fontSize:11}}>Dettes: {fmt(d.ca-d.enc)}</span>
+                        </div>
+                      </div>
+                    );
+                  })
+                }
+              </div>
+
+              {/* Top 10 produits toutes boutiques */}
+              <div style={{background:"#1a1f2e",borderRadius:16,padding:20,marginBottom:24}}>
+                <div style={{color:"#f0f4ff",fontWeight:700,fontSize:16,marginBottom:16}}>🏆 Top 10 produits — toutes boutiques</div>
+                {topProd.length===0
+                  ?<div style={{color:"#8891aa",textAlign:"center",padding:20,fontSize:14}}>Aucune vente sur cette période</div>
+                  :topProd.map(([nom,d],i)=>{
+                    const pct = topProd[0][1].ca>0?Math.round((d.ca/topProd[0][1].ca)*100):0;
+                    return(
+                      <div key={nom} style={{marginBottom:12}}>
+                        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
+                          <div style={{display:"flex",alignItems:"center",gap:8}}>
+                            <span style={{color:COLS[i%COLS.length],fontWeight:700,fontSize:13,minWidth:22}}>#{i+1}</span>
+                            <span style={{color:"#f0f4ff",fontWeight:600,fontSize:14}}>{nom}</span>
+                            <span style={{color:"#8891aa",fontSize:12}}>{d.nb} ventes</span>
+                          </div>
+                          <span style={{color:COLS[i%COLS.length],fontWeight:700,fontSize:13}}>{fmt(d.ca)}</span>
+                        </div>
+                        <div style={{height:4,background:"#252b3b",borderRadius:99}}>
+                          <div style={{height:"100%",width:`${pct}%`,background:COLS[i%COLS.length],borderRadius:99}}/>
+                        </div>
+                      </div>
+                    );
+                  })
+                }
+              </div>
+
+              {/* Tableau récap par boutique */}
+              <div style={{background:"#1a1f2e",borderRadius:16,padding:20}}>
+                <div style={{color:"#f0f4ff",fontWeight:700,fontSize:16,marginBottom:16}}>📋 Classement des boutiques</div>
+                <div style={{overflowX:"auto"}}>
+                  <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
+                    <thead>
+                      <tr style={{borderBottom:"1px solid rgba(255,255,255,0.08)"}}>
+                        {["#","Boutique","Catégorie","Plan","Transactions","CA","Encaissé","Dettes"].map(h=>(
+                          <th key={h} style={{color:"#8891aa",fontWeight:600,textAlign:"left",padding:"8px 10px",textTransform:"uppercase",fontSize:11,whiteSpace:"nowrap"}}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {parBoutique.map((b,i)=>{
+                        const planCol = b.plan==="pro"?"#00d97e":b.plan==="business"?"#ffd93d":"#7b8cff";
+                        return(
+                          <tr key={b.id} style={{borderBottom:"1px solid rgba(255,255,255,0.04)"}} onClick={()=>{setSelectedBoutique(b);setActiveTab("bilans");}} className="hover">
+                            <td style={{color:"#8891aa",padding:"10px 10px"}}>{i+1}</td>
+                            <td style={{padding:"10px 10px"}}>
+                              <div style={{color:"#f0f4ff",fontWeight:600}}>{b.nomBoutique}</div>
+                              <div style={{color:"#8891aa",fontSize:11}}>📞 {b.telephone}</div>
+                            </td>
+                            <td style={{color:"#8891aa",padding:"10px 10px",fontSize:12}}>{b.categorie||"—"}</td>
+                            <td style={{padding:"10px 10px"}}>
+                              <span style={{background:`${planCol}22`,color:planCol,borderRadius:5,padding:"2px 7px",fontSize:11,fontWeight:700}}>{(b.plan||"essai").toUpperCase()}</span>
+                            </td>
+                            <td style={{color:"#f0f4ff",padding:"10px 10px",fontWeight:600}}>{b.nb}</td>
+                            <td style={{color:"#f0f4ff",padding:"10px 10px",fontWeight:700}}>{fmt(b.ca)}</td>
+                            <td style={{color:"#00d97e",padding:"10px 10px",fontWeight:700}}>{fmt(b.enc)}</td>
+                            <td style={{color:b.ca-b.enc>0?"#ff6b6b":"#8891aa",padding:"10px 10px",fontWeight:600}}>{fmt(b.ca-b.enc)}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                    <tfoot>
+                      <tr style={{borderTop:"2px solid rgba(0,217,126,0.3)"}}>
+                        <td colSpan={4} style={{color:"#f0f4ff",fontWeight:700,padding:"10px 10px",fontSize:13}}>TOTAL PLATEFORME</td>
+                        <td style={{color:"#7b8cff",fontWeight:800,padding:"10px 10px"}}>{nbV}</td>
+                        <td style={{color:"#f0f4ff",fontWeight:800,padding:"10px 10px"}}>{fmt(ca)}</td>
+                        <td style={{color:"#00d97e",fontWeight:800,padding:"10px 10px"}}>{fmt(enc)}</td>
+                        <td style={{color:"#ff6b6b",fontWeight:800,padding:"10px 10px"}}>{fmt(det)}</td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+                <div style={{color:"#8891aa",fontSize:11,marginTop:10}}>💡 Cliquez sur une boutique pour voir son bilan détaillé</div>
+              </div>
+            </div>
+          );
+        })()}
+
+        {/* ── ONGLET CARTE ── */}
         {activeTab==="carte"&&(
           <div>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
